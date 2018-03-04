@@ -33,12 +33,12 @@ float CHn_Out[4];
 //PID 结构体参数
 //带Single是单级PID
 
-PID_S ROLL_PID={0,0,0,0,0,2};    //{0.1,0,0,0,0,2}
-PID_S PITCH_PID={0,0,0,0,0,2}; //{0.1,0,0,0,0,2}
+PID_S ROLL_PID={0.1,0,0,0,0,2};    //{0.1,0,0,0,0,2}
+PID_S PITCH_PID={0.1,0,0,0,0,2}; //{0.1,0,0,0,0,2}
 PID_S YAW_PID={-0.25,0,0,0,0,2};
 	
-PID_S ANGLE_SPEED_Y_PID={0,0,0,0,0,5};  //{-10,-20,-1,0,0,5}
-PID_S ANGLE_SPEED_X_PID={0,0,0,0,0,5};
+PID_S ANGLE_SPEED_Y_PID={-5,-10,0,0,0,5};  //{-10,-20,-1,0,0,5}
+PID_S ANGLE_SPEED_X_PID={-5,-10,0,0,0,5};
 PID_S ANGLE_SPEED_Z_PID={0,0,0,0,0,5}; //{-20,-20,0,0,0,5};
 
 PID_S Height_PID={0.8,0,0,0,0,9000};  //0.3
@@ -131,6 +131,7 @@ void add_pid(int arg_num,char **s,float *args){
   
   uprintf("OK ,set %s %s = %f\r\n",s[0],s[1],*pid_ptr);  
 }
+
 float * get_pid_ptr(char **s){
   char * control_type=s[0];
   char * pid_type=s[1];
@@ -158,6 +159,8 @@ float * get_pid_ptr(char **s){
     ptr=&X_PID;
   }else if(compare_string("y",control_type)){
     ptr=&Y_PID;
+  }else{
+    return 0;
   }
   
   if(compare_string("p",pid_type)){
@@ -168,36 +171,19 @@ float * get_pid_ptr(char **s){
     float_ptr=&(ptr->KD);
   }else if(compare_string("i_max",pid_type)){
     float_ptr=&(ptr->i_max);
+  }else{
+    return 0;
   }
   return float_ptr;
   
 }
-void Fly_Up(void){		//起飞
-	
-	if(HEIGHT_T>70){
-		height_target=70;
-	}else{
-		height_target=HEIGHT_T;
-	}  
-	State=FLY;
-	base_duty=UP_DUTY;
-	
-}
+
 inline void Fly_Stop(void){
 	State=STOP;
 	yaw_offset_init_ok=0;
 }
 
-/*
-void Fly_Land(void){
-	State=LAND;
-	roll_target=0;
-	pitch_target=0;
-	//roll_target=ROLL_CONSTANT;
-	//pitch_target=PITCH_CONSTANT;
-}
 
-*/
 float PID_Control(PID_S *PID,float target,float now){
 	float err;
 	float err_dt;
@@ -276,6 +262,7 @@ float yaw_deal(){
 	}
 	return result;
 }
+
 enum attitude{
   PITCH=0x00,
   ROLL=0x01,
@@ -294,7 +281,7 @@ inline void Motor_Stop(){
 
 char Angle_Speed_Z_Flag=0;
 char Roll_Pitch_Flag=0;
-char Motor_Open_Flag=0;
+char Motor_Open_Flag=1;
 
 inline void set_flag_command(char * flag,int arg_num,float * args){
 	if(arg_num>1){

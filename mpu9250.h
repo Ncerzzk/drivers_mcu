@@ -3,7 +3,7 @@
 
 #include "i2c.h"
 #include "stm32f4xx_hal.h"
-
+#include "function_ptr.h"
 
 #define	SMPLRT_DIV		0x19	//陀螺仪采样率，典型值：0x01(500Hz)
 //采样频率=陀螺仪输出频率/(1+SMPLRT_DIV )    陀螺仪输出频率当低通滤波不开的时候为8KHZ，当低通开的时候为1K
@@ -57,12 +57,10 @@
 #define MAG_ASAY			0x11
 #define MAG_ASAZ			0x12
 
+#define MAG_WIA             0x00
 
-typedef uint8_t (*i2c_write_buffer_fptr)(uint8_t slaveAddr, uint8_t writeAddr, uint8_t *pBuffer,uint16_t len);
-typedef uint8_t (*i2c_read_buffer_fptr) (uint8_t slaveAddr, uint8_t writeAddr, uint8_t *pBuffer,uint16_t len);
-typedef void (*i2c_err_reset_fptr) (void);
-typedef void (*delay_ms_fptr)(uint32_t t);
-typedef void (*delay_us_fptr)(uint32_t t);
+
+
 
 typedef enum{
 	RANGE250=0x00,    //+-250
@@ -106,7 +104,7 @@ typedef struct{
 	uint8_t dev_mag_addr; //磁力计地址
 	uint8_t dev_ID;
 	uint8_t I2C_OK;
-    uint8_t I2C_TIME_OUT;
+//    uint8_t I2C_TIME_OUT;
 	uint16_t i2c_error_count;
 	MPU_Setting *setting;
 }MPU_Dev;

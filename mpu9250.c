@@ -19,9 +19,10 @@ uint8_t I2C_Read_Buffer(uint8_t slaveAddr,uint8_t readAddr,uint8_t *pBuffer,uint
 void I2C_Reset(void);
 extern void Delay_Us(uint32_t nus);
 
+
+
 void mpu_error_deal(MPU_Dev *dev);
-
-
+inline void mpu_error_deal(MPU_Dev *dev);
 
 static void mpu_write_byte(MPU_Dev *dev,uint8_t write_addr,uint8_t data){
 	if(dev->i2c_write_buffer(dev->dev_addr,write_addr,&data,1)!=dev->I2C_OK){
@@ -45,24 +46,24 @@ static uint8_t mpu_read_byte(MPU_Dev *dev,uint8_t read_addr){
 	return temp;
 }
 
-int I2C_ERR_CNT=0;
-#define I2C_ERROR_CHECK(x)   do{\
-                                if(x!=dev->I2C_OK){\
-                                  I2C_ERR_CNT++;\
-                                    if(I2C_ERR_CNT>5){\
-                                  dev->i2c_reset();I2C_ERR_CNT=0;\
-                                    }\
-                                    return ;\
-                                }}while(0);
+inline void I2C_Error_Check(MPU_Dev *dev,uint8_t i2c_result){
+  if(i2c_result!=dev->I2C_OK){
+    mpu_error_deal(dev);
+  }
+}
 void MPU_Read6500(MPU_Dev *dev,int16_t ac[],int16_t gy[]){
   
 	uint8_t temp[6];
-    I2C_ERROR_CHECK(dev->i2c_read_buffer(dev->dev_addr,ACCEL_XOUT_H,temp,6));
+    uint8_t i2c_result;
+    
+    i2c_result=dev->i2c_read_buffer(dev->dev_addr,ACCEL_XOUT_H,temp,6);
+    I2C_Error_Check(dev,i2c_result);
 	ac[0]=(temp[0]<<8)|temp[1];
 	ac[1]=(temp[2]<<8)|temp[3];
 	ac[2]=(temp[4]<<8)|temp[5];
     
-    I2C_ERROR_CHECK(dev->i2c_read_buffer(dev->dev_addr,GYRO_XOUT_H,temp,6));
+    i2c_result=dev->i2c_read_buffer(dev->dev_addr,GYRO_XOUT_H,temp,6);
+    I2C_Error_Check(dev,i2c_result);
 	gy[0]=(temp[0]<<8)|temp[1];
 	gy[1]=(temp[2]<<8)|temp[3];
 	gy[2]=(temp[4]<<8)|temp[5];	
@@ -71,14 +72,15 @@ void MPU_Read6500(MPU_Dev *dev,int16_t ac[],int16_t gy[]){
 void MPU_ReadM_Mag(MPU_Dev *dev,int16_t mag[]){
 	uint8_t temp[6]; 
     uint8_t ST_data;
+    uint8_t i2c_result;
+	i2c_result=dev->i2c_read_buffer(dev->dev_mag_addr,MAG_XOUT_L,temp,6);
     
-	I2C_ERROR_CHECK(dev->i2c_read_buffer(dev->dev_mag_addr,MAG_XOUT_L,temp,6));
-    
+    I2C_Error_Check(dev,i2c_result);
     /*
     连续测量模式，读取完数据之后，必须读一下ST2这个寄存器作为读取完的标志。
     */
-    I2C_ERROR_CHECK(dev->i2c_read_buffer(dev->dev_mag_addr,MAG_ST2,&ST_data,1));
-
+    i2c_result=dev->i2c_read_buffer(dev->dev_mag_addr,MAG_ST2,&ST_data,1);
+    I2C_Error_Check(dev,i2c_result);
     /*
     磁力计的正方向需要修改。磁力计的X、Y与加速度计的反了，因此，磁力计的X应作为Y
     磁力计的Y应作为X，否则在角度融合时会出现错误。
@@ -102,7 +104,7 @@ void MPU9250_Init(MPU_Dev * dev){
 	dev->delay_ms=HAL_Delay;
 	
 	dev->I2C_OK=0x00;
-    dev->I2C_TIME_OUT=HAL_TIMEOUT;
+    //dev->I2C_TIME_OUT=HAL_TIMEOUT;
 	dev->i2c_reset=I2C_Reset;
     dev->delay_us=Delay_Us;
 	//dev->data=&MPU9250_Data;
@@ -125,11 +127,10 @@ void MPU9250_Init(MPU_Dev * dev){
 	mpu_write_byte(dev,SMPLRT_DIV, 0x00);
 	mpu_write_byte(dev,MPU_CONFIG, 0x02);  //之前延时为20ms(0x06，现在为3ms左右 0x02)
 
-	 mpu_write_byte(dev,GYRO_CONFIG, dev->setting->gyro_range_setting);   //
+	mpu_write_byte(dev,GYRO_CONFIG, dev->setting->gyro_range_setting);   //
 	mpu_write_byte(dev,ACCEL_CONFIG, dev->setting->accel_range_setting | dev->setting->accel_high_pass_filter_setting); 
 	
     dev->setting->mag_range=4912.0/100.0f;   
-    
     
     
     data=0x01;

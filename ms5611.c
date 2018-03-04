@@ -3,18 +3,10 @@
 static uint32_t ms5611_ut;  // static result of temperature measurement
 static uint32_t ms5611_up;  // static result of pressure measurement
 static uint16_t ms5611_c[PROM_NB];  // on-chip ROM
-static uint8_t ms5611_osr = CMD_ADC_4096;
+
+MS5611_Dev MS5611;
 
 
-
-
-typedef struct{
-  	i2c_write_buffer_fptr i2c_write_buffer;
-	i2c_read_buffer_fptr i2c_read_buffer;
-	i2c_err_reset_fptr i2c_reset;
-	delay_ms_fptr delay_ms;
-    uint8_t address;
-}MS5611_Dev;
 
 
 extern I2C_HandleTypeDef hi2c3;
@@ -22,28 +14,97 @@ uint8_t I2C_Write_Buffer(uint8_t slaveAddr, uint8_t writeAddr, uint8_t *pBuffer,
 uint8_t I2C_Read_Buffer(uint8_t slaveAddr,uint8_t readAddr,uint8_t *pBuffer,uint16_t len);
 void I2C_Reset(void);
 void HAL_Delay(__IO uint32_t Delay);
-/*
+
+static uint16_t ms5611_prom(MS5611_Dev * dev,int8_t coef_num);
+
 void MS5611_Init(MS5611_Dev * dev){
   dev->i2c_read_buffer=I2C_Read_Buffer;
   dev->i2c_write_buffer=I2C_Write_Buffer;
-  dev->i2c_reset=I2C_Reset();
-  dev->delay_ms=HAL_Delay();
+  dev->i2c_reset=I2C_Reset;
+  dev->delay_ms=HAL_Delay;
+  dev->call_cycle=2;         //Read函数调用周期，单位ms
   
-  dev->address=MS5611_ADDR;
+  dev->dev_addr=MS5611_ADDR;
+  dev->I2C_OK=0x00;
   
+  dev->osr=CMD_ADC_4096;
   
-
-  for (i = 0; i < PROM_NB; i++)
-    ms5611_c[i] = ms5611_prom(i);
+  switch(dev->osr){
+  case CMD_ADC_4096:
+    dev->adc_time=10;
+    break;
+  case CMD_ADC_2048:
+    dev->adc_time=5;
+    break;
+  case CMD_ADC_1024:
+    dev->adc_time=3;
+    break;
+  case CMD_ADC_512:
+    dev->adc_time=2;
+    break;
+  case CMD_ADC_256:
+    dev->adc_time=1;
+    break;
+  }
+  
+  dev->call_time=0;
+  dev->step=0;
+  for (int i = 0; i < PROM_NB; ++i){
+    ms5611_c[i] = ms5611_prom(dev,i);
+  }
 }
 
 static uint16_t ms5611_prom(MS5611_Dev * dev,int8_t coef_num)
 {
   uint8_t rxbuf[2] = { 0, 0 };
-  dev->i2c_read_buffer(dev->address,CMD_PROM_RD+coef_num * 2,rxbuf,2);
+  dev->i2c_read_buffer(dev->dev_addr,CMD_PROM_RD+coef_num * 2,rxbuf,2);
   return rxbuf[0] << 8 | rxbuf[1];
 }
 
+static void ms5611_error_deal(MS5611_Dev *dev){
+  dev->i2c_error_count++;
+  if(dev->i2c_error_count>20){
+    dev->i2c_reset();
+    dev->i2c_error_count=0;
+  }  
+}
+
+inline void I2C_Error_Check(MS5611_Dev *dev,uint8_t i2c_result){
+  if(i2c_result!=dev->I2C_OK){
+    ms5611_error_deal(dev);
+  }
+}
+
+static void ms5611_write_byte(MS5611_Dev *dev,uint8_t write_addr,uint8_t data){
+  uint8_t i2c_result;
+  i2c_result=dev->i2c_write_buffer(dev->dev_addr,write_addr,&data,1);
+  I2C_Error_Check(dev,i2c_result);
+}
+
+
+ /*
+ * 开始采集温度.
+ */
+static void ms5611_start_ut(MS5611_Dev *dev){
+  ms5611_write_byte(dev,CMD_ADC_CONV + CMD_ADC_D2 + dev->osr,1);
+}
+ /*
+ * 开始采集气压.
+ */
+static void ms5611_start_up(MS5611_Dev *dev)
+{
+  ms5611_write_byte(dev,CMD_ADC_CONV + CMD_ADC_D1 + dev->osr,1);
+}
+
+/*
+* 读取 ms5611 采集的 温度/气压(24bit)
+*/
+static uint32_t ms5611_read_adc(MS5611_Dev *dev)
+{
+    uint8_t rxbuf[3];
+    dev->i2c_read_buffer(dev->dev_addr,CMD_ADC_READ,rxbuf,3);
+    return (rxbuf[0] << 16) | (rxbuf[1] << 8) | rxbuf[2];
+}
 
 static void ms5611_calculate(int32_t *pressure, int32_t *temperature)
 {
@@ -74,4 +135,38 @@ static void ms5611_calculate(int32_t *pressure, int32_t *temperature)
     if (temperature)
         *temperature = temp;
 }
-*/
+
+
+void uprintf(char *fmt, ...);
+void MS5611_Read(MS5611_Dev *dev,float * height){
+  int32_t pressure,temperature;
+  
+  if(dev->call_cycle>=dev->adc_time){
+    dev->step++;
+  }else{
+    dev->call_time+=dev->call_cycle;
+    if(dev->call_time>dev->adc_time){
+      dev->call_time=0;
+      dev->step++;
+    }else{
+      return ;
+    }
+  }
+  
+  switch(dev->step){
+  case 1:
+    ms5611_start_up(dev); 
+    break;
+  case 2:
+    ms5611_up=ms5611_read_adc(dev);
+    ms5611_start_ut(dev);    
+    break;
+  case 3:
+    ms5611_ut=ms5611_read_adc(dev);
+    ms5611_calculate(&pressure,&temperature);
+    dev->step=0;
+    *height=(101325-pressure)*10;
+    //uprintf("%d\r\n",pressure);
+    break;
+  }
+}

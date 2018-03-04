@@ -53,8 +53,9 @@ void NRF_Init(NRF_Dev * dev){
   nrf_write_bytes(dev,RX_ADDR_P0,RX_ADDRESS,5);
   
 
-
+  
   dev->set_gpio(CE,LOW);
+  //dev->set_gpio(CE,HIGH);
 }
 
 
@@ -62,7 +63,7 @@ static void NRF_Set_GPIO(NRF_GPIO io,NRF_GPIO_Level level){
   if(io==CSN){
     HAL_GPIO_WritePin(GPIOA,GPIO_PIN_5,level);
   }else if(io==CE){
-    HAL_GPIO_WritePin(GPIOA,GPIO_PIN_4,level);
+    HAL_GPIO_WritePin(GPIOA,GPIO_PIN_1,level);
   } 
 }
 extern SPI_HandleTypeDef hspi2;

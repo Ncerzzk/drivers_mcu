@@ -2,9 +2,28 @@
 #define __MS5611_H
 
 #include "stm32f4xx_hal.h"
+#include "function_ptr.h"
+
+
+typedef struct{
+  	i2c_write_buffer_fptr i2c_write_buffer;
+	i2c_read_buffer_fptr i2c_read_buffer;
+	i2c_err_reset_fptr i2c_reset;
+	delay_ms_fptr delay_ms;
+    uint8_t dev_addr;
+	uint8_t I2C_OK;
+    uint8_t I2C_TIME_OUT;
+	uint16_t i2c_error_count;
+    uint8_t osr;            //常量
+    uint8_t call_cycle;     //常量
+    uint8_t adc_time;       //常量
+    
+    uint16_t call_time;     //调用时间
+    uint8_t step;           //调用状态
+}MS5611_Dev;
 
 // MS5611, Standard address 0x77
-#define MS5611_ADDR                 0xEC
+#define MS5611_ADDR                 0xEE
 // Autodetect: turn off BMP085 while initializing ms5611 and check PROM crc to confirm device
 #define BMP085_OFF                  digitalLo(BARO_GPIO, BARO_PIN);
 #define BMP085_ON                   digitalHi(BARO_GPIO, BARO_PIN);
@@ -22,12 +41,7 @@
 #define CMD_PROM_RD             0xA0 // Prom read command
 #define PROM_NB                 8
 
-
-typedef uint8_t (*i2c_write_buffer_fptr)(uint8_t slaveAddr, uint8_t writeAddr, uint8_t *pBuffer,uint16_t len);
-typedef uint8_t (*i2c_read_buffer_fptr) (uint8_t slaveAddr, uint8_t writeAddr, uint8_t *pBuffer,uint16_t len);
-typedef void (*i2c_err_reset_fptr) (void);
-typedef void (*delay_ms_fptr)(uint32_t t);
-
-
-
+extern MS5611_Dev MS5611;
+void MS5611_Init(MS5611_Dev * dev);
+void MS5611_Read(MS5611_Dev *dev,float * height);
 #endif
