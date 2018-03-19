@@ -11,9 +11,13 @@ float * debug_wave[4];  //指针数组，指向要发送的四个波形
 float wave_gain=1; //波形增益，因为要把float转为int，可能需要适当放大。
 
 extern float CHn_Out[4];
-extern float Angle_Speed[3],Accel[3],Angle[3];
+extern float Angle_Speed[3],Accel[3],Angle[3],Accel_E[3],Velocity[3];
 
 extern float pitch_target;
+extern float MS5611_Height;
+
+extern float Height;
+extern float Accel_WFS[3];
 
 char Wave_Set[4]; //波形设置,写入flash中
 
@@ -35,7 +39,7 @@ pram_node Pram_Array[PRAM_NUM]={
 };
 
 
-#define WAVE_TYPE_NUM 13
+#define WAVE_TYPE_NUM 24
 
 typedef struct{
   char * wave_string;
@@ -58,7 +62,25 @@ wave_node Wave_Array[WAVE_TYPE_NUM]={
   {"c1",CHn_Out+0},
   {"c2",CHn_Out+1},
   {"c3",CHn_Out+2},
-  {"c4",CHn_Out+3}
+  {"c4",CHn_Out+3},
+  
+  {"ms_height",&MS5611_Height},
+  
+  {"axe",Accel_E+0},
+  {"aye",Accel_E+1},
+  {"aze",Accel_E+2},
+  
+  {"height",&Height},
+  
+  {"vx",Velocity+0},
+  {"vy",Velocity+1},
+  {"vz",Velocity+2},
+  
+  {"axw",Accel_WFS+0},
+  {"ayw",Accel_WFS+1},
+  {"azw",Accel_WFS+2}
+  
+  
   
 };
 
@@ -164,6 +186,25 @@ float KalMan(Kal_Struct *kal,float x){
 	return kal->kal_out;
 }
 
+
+
+float Window_Filter(Window_Filter_Struct * wfs,float data){
+  int j;
+  float sum=0;
+  int count;
+  
+  if(!wfs->Window_Buffer)
+    return 0;
+  wfs->Window_Buffer[wfs->i]=data;
+  wfs->i++;
+  if(wfs->i==wfs->max){
+    wfs->i=0; 
+  }
+  for(j=0;j<wfs->max;++j){
+    sum+=wfs->Window_Buffer[j];
+  }
+  return sum/wfs->max;
+}
 /*
 	控制是否发送波形的命令
 */

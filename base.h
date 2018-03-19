@@ -17,6 +17,14 @@ typedef struct _kal_struct{
 	
 }Kal_Struct;
 
+typedef struct{
+  float * Window_Buffer;
+  int max;  //数组长度
+  int i;
+}Window_Filter_Struct;
+
+float Window_Filter(Window_Filter_Struct * wfs,float data);
+
 float KalMan(Kal_Struct *kal,float x);
 
 extern char Send_Wave_Flag;

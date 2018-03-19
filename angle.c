@@ -1,6 +1,7 @@
 #include "angle.h"
 #include "usart.h"
 #include "arm_math.h"
+#include "base.h"
 
 
 
@@ -15,8 +16,12 @@ extern TIM_HandleTypeDef htim7;
 extern MPU_Dev MPU9250;
 float Angle_Speed[3];
 float Accel[3];
+float Accel_WFS[3];
 float Angle[3];
 float Mag[3];
+float Accel_E[3]; //天地坐标系下的加速度
+float Velocity[3];
+float Height;
 int16_t Gyro_Offset[3];
 
 float gravity_X,gravity_Y,gravity_Z; //重力加速度分量
@@ -32,20 +37,13 @@ float q1=0.0f;
 float q2=0.0f;
 float q3=0.0f;
 
-float q0_=1.0f;
-float q1_=0.0f;
-float q2_=0.0f;
-float q3_=0.0f;
-
 float exInt,eyInt,ezInt;
 
-//float exInt_,eyInt_,ezInt_;
-
-float IMU_P=2.0f;				//2.0f   //20
+float IMU_P=1.0f;				//2.0f   //20
 float IMU_I=0.005f;		//0.005          0.03
 
 
-int16_t accel_x,accel_y,accel_z;
+
 
 /*
   对数据进行零偏校准
@@ -63,17 +61,17 @@ float Get_Scale_Data(float raw_data,float offset,float scale){
 
 void Scale_Mag(float *mag){
   float mag_offset[3]={
-    3.7562425451f,
-    0.4408918078f,
-    0.1397924974f
+    -0.98067624060245,
+    0.699519190197516,
+   -0.0901617905243115
   };
   float B[6]={
-    1.06050812555299f,
-    0.00942842218385054f,
-    -0.0190140253081353f,
-    0.988087714217386f,
-    -0.00360324870648793f,
-    0.954746060742793f
+    1.02144401181779,
+    0.000541435867779272,
+    -0.00396394687224986,
+    1.01231799945786,
+    -0.00576948832812266,
+    0.967142037621097
   };
   float temp[3];
   int i;
@@ -167,8 +165,15 @@ void Free_Falling_Detect(float * accel){
 
 float ex,ey,ez;
 
+float Accel_Z_Window[8];
+float Accel_X_Window[8];
+float Accel_Y_Window[8];
 
-void IMU_Update(float * ac,float * gy,float *attitude){
+Window_Filter_Struct Accel_Z_WFS={Accel_Z_Window,8,0};
+Window_Filter_Struct Accel_X_WFS={Accel_X_Window,8,0};
+Window_Filter_Struct Accel_Y_WFS={Accel_Y_Window,8,0};
+
+void IMU_Update(float * ac,float * gy,float *attitude,float *ace){
 
 	float ax,ay,az,wx,wy,wz;
     float q0q0 = q0 * q0;                                                        
@@ -184,10 +189,22 @@ void IMU_Update(float * ac,float * gy,float *attitude){
 	float norm;
     float gbx,gby,gbz;
     
-    ax=ac[0];ay=ac[1];az=ac[2];
+    Accel_WFS[2]=Window_Filter(&Accel_Z_WFS,ac[2]);
+    Accel_WFS[0]=Window_Filter(&Accel_X_WFS,ac[0]);
+    Accel_WFS[1]=Window_Filter(&Accel_Y_WFS,ac[1]);
+    
+    az=Accel_WFS[2];
+    ax=Accel_WFS[0];
+    ay=Accel_WFS[1];
+
+    //ax=ac[0];ay=ac[1];az=ac[2];
     wx=gy[0];wy=gy[1];wz=gy[2];
-	
-//	float exInt,eyInt,ezInt;     在这里定义有问题
+      
+        //计算加速度旋转到天地坐标系的值
+    ace[0] = 2*ax*(0.5f - q2q2 - q3q3) + 2*ay*(q1q2 - q0q3) + 2*az*(q1q3 + q0q2); 
+	ace[1] = 2*ax*(q1q2 + q0q3) + 2*ay*(0.5f - q1q1 - q3q3) + 2*az*(q2q3 - q0q1); 
+	ace[2] = 2*ax*(q1q3 - q0q2) + 2*ay*(q2q3 + q0q1) + 2*az*(0.5f - q1q1 - q2q2);
+    
 	arm_sqrt_f32(ax*ax+ay*ay+az*az,&norm);
     
 	if(norm<Semig)
@@ -239,7 +256,9 @@ void IMU_Update(float * ac,float * gy,float *attitude){
 }
  
 
-void AHR_Update(float * ac,float * gy,float * mag,float * attitude){
+
+
+void AHR_Update(float * ac,float * gy,float * mag,float * attitude,float *ace){
     float ax,ay,az,wx,wy,wz,mx,my,mz;
 	float norm;
 	float gbx,gby,gbz;
@@ -258,9 +277,24 @@ void AHR_Update(float * ac,float * gy,float * mag,float * attitude){
 	float hx,hy,hz,bx,bz;
 	float mbx,mby,mbz;
     
-    ax=ac[0];ay=ac[1];az=ac[2];
+    Accel_WFS[2]=Window_Filter(&Accel_Z_WFS,ac[2]);
+    Accel_WFS[0]=Window_Filter(&Accel_X_WFS,ac[0]);
+    Accel_WFS[1]=Window_Filter(&Accel_Y_WFS,ac[1]);
+    
+    az=Accel_WFS[2];
+    ax=Accel_WFS[0];
+    ay=Accel_WFS[1];
+
+    //ax=ac[0];ay=ac[1];az=ac[2];
     wx=gy[0];wy=gy[1];wz=gy[2];
     mx=mag[0];my=mag[1];mz=mag[2];
+
+
+        //计算加速度旋转到天地坐标系的值
+    ace[0] = 2*ax*(0.5f - q2q2 - q3q3) + 2*ay*(q1q2 - q0q3) + 2*az*(q1q3 + q0q2); 
+	ace[1] = 2*ax*(q1q2 + q0q3) + 2*ay*(0.5f - q1q1 - q3q3) + 2*az*(q2q3 - q0q1); 
+	ace[2] = 2*ax*(q1q3 - q0q2) + 2*ay*(q2q3 + q0q1) + 2*az*(0.5f - q1q1 - q2q2);
+    
     
     arm_sqrt_f32(ax*ax+ay*ay+az*az,&norm);
 	if(norm<Semig)
@@ -280,6 +314,9 @@ void AHR_Update(float * ac,float * gy,float * mag,float * attitude){
 	hx = 2*mx*(0.5f - q2q2 - q3q3) + 2*my*(q1q2 - q0q3) + 2*mz*(q1q3 + q0q2); 
 	hy = 2*mx*(q1q2 + q0q3) + 2*my*(0.5f - q1q1 - q3q3) + 2*mz*(q2q3 - q0q1); 
 	hz = 2*mx*(q1q3 - q0q2) + 2*my*(q2q3 + q0q1) + 2*mz*(0.5f - q1q1 - q2q2); 
+    
+    
+    
     
     arm_sqrt_f32((hx*hx) + (hy*hy),&bx);
 	bz = hz;
@@ -328,8 +365,34 @@ void AHR_Update(float * ac,float * gy,float * mag,float * attitude){
     attitude[0]= asin(-2*q1*q3 + 2*q0*q2)* 57.3f;           //pitch
     attitude[1]= atan2(2*q2*q3 + 2*q0*q1, -2*q1*q1 - 2*q2*q2+1)* 57.3f;   //roll
     attitude[2]= atan2(2*q1q2 + 2*q0q3, -2*q2q2 - 2*q3q3+1)* 57.3f;         //yaw
-    	
+    
 }
 
+/*
+call_time：积分时间，单位ms
+v ：全局变量数组，储存三轴速度
+*/
 
+float ace_sub=0;  //二阶互补滤波的补偿项，补偿在加速度上。
 
+void Get_Velocity(float * ace,float *v,int call_time,float ace_sub){
+  int i=0;
+  for(i=0;i<2;++i){
+    v[i]+=ace[i]*980*call_time/1000;   //*9.8m/s^2
+  }
+  v[2]+=(ace[2]-1)*980*call_time/1000+ace_sub*0.005;  //对Z轴特殊处理，因为有重力加速度的影响
+}
+
+/*
+height 必须指向一个全局变量
+call_time 积分时间，单位ms
+refer_height 参考高度，一般为气压计得到的高度
+vz Z轴速度
+*/
+void Get_Height(float *vz,float refer_height,int call_time,float *height){
+  float sub;
+  sub=refer_height-*height; //一阶互补滤波的补偿项，补偿在速度上
+  *height+=(*vz)*call_time/1000+sub*0.06;
+  ace_sub=sub;
+
+}

@@ -121,7 +121,7 @@ void MPU9250_Init(MPU_Dev * dev){
 	
 	dev->delay_ms(50);
 	
-    dev->i2c_write_buffer(0xEE,0x05,&data,1);
+    //dev->i2c_write_buffer(0xEE,0x05,&data,1);
  
 	mpu_write_byte(dev,PWR_MGMT_1,0x00);
 	mpu_write_byte(dev,SMPLRT_DIV, 0x00);
@@ -130,8 +130,11 @@ void MPU9250_Init(MPU_Dev * dev){
 	mpu_write_byte(dev,GYRO_CONFIG, dev->setting->gyro_range_setting);   //
 	mpu_write_byte(dev,ACCEL_CONFIG, dev->setting->accel_range_setting | dev->setting->accel_high_pass_filter_setting); 
 	
-    dev->setting->mag_range=4912.0/100.0f;   
+    dev->setting->mag_range=4912.0/100.0f; 
     
+    mpu_write_byte(dev,INT_PIN_CFG,0x02);    //MPU6500 开启路过模式
+    
+    dev->delay_ms(50);
     
     data=0x01;
     dev->i2c_write_buffer(dev->dev_mag_addr,MAG_CONTROL2,&data,1);   //soft reset AK8963
@@ -170,7 +173,7 @@ void MPU9250_Init(MPU_Dev * dev){
 			break;		
 	}
 	
-	mpu_write_byte(dev,INT_PIN_CFG,0x02);    //MPU6500 开启路过模式
+	
 	
 	dev->dev_ID=mpu_read_byte(dev,WHO_AM_I);
 	

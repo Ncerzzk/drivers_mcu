@@ -5,27 +5,34 @@
 
 #define HEIGHT_T  120
 #define UP_DUTY			60
+
+enum attitude{
+  PITCH=0x00,
+  ROLL=0x01,
+  YAW=0x02,
+  X=0x00,
+  Y=0x01,
+  Z=0x02
+};
+
+
 //期望的俯仰、横滚、偏航角
 float pitch_target=0;     //3.25
 float roll_target=0;  //48.5
 float yaw_target=0;
-float yaw_offset=0;
-float yaw_dealed=0;
-float height_target=0;   //单位cm
+float height_target=50;   //单位cm
+float height_offset=0;  
 float Angle_Speed_X_Out=0;
 float Angle_Speed_Y_Out=0;
 float Angle_Speed_Z_Out=0;
+
 float Accel_Speed_Z_Out=0; //加速度环 高度环的内环
-float Height_Out=0;
-float Pitch_Out=0;
-float Roll_Out=0;
-float Yaw_Out=0;
-float Velocity_Out=0;
-char Fly=0;
 
 extern float Angle[3];
 extern float Angle_Speed[3];
-float height_offset; 		//高度初始值
+extern float MS5611_Height;
+extern float Velocity[3];
+extern float Height;
 
 float base_duty=0; //50
 float CHn_Out[4];
@@ -33,17 +40,17 @@ float CHn_Out[4];
 //PID 结构体参数
 //带Single是单级PID
 
-PID_S ROLL_PID={0.1,0,0,0,0,2};    //{0.1,0,0,0,0,2}
-PID_S PITCH_PID={0.1,0,0,0,0,2}; //{0.1,0,0,0,0,2}
-PID_S YAW_PID={-0.25,0,0,0,0,2};
+PID_S ROLL_PID={0.2,0,0,0,0,2};    //{0.1,0,0,0,0,2}
+PID_S PITCH_PID={0.2,0,0,0,0,2}; //{0.1,0,0,0,0,2}
+PID_S YAW_PID={-0.1,0,0,0,0,2};
 	
-PID_S ANGLE_SPEED_Y_PID={-5,-10,0,0,0,5};  //{-10,-20,-1,0,0,5}
-PID_S ANGLE_SPEED_X_PID={-5,-10,0,0,0,5};
-PID_S ANGLE_SPEED_Z_PID={0,0,0,0,0,5}; //{-20,-20,0,0,0,5};
+PID_S ANGLE_SPEED_Y_PID={-30,-100,-1,0,0,20};  //{-10,-20,-1,0,0,5}
+PID_S ANGLE_SPEED_X_PID={-30,-100,-1,0,0,20};
+PID_S ANGLE_SPEED_Z_PID={-10,-20,0,0,0,20}; //{-20,-20,0,0,0,5};
 
 PID_S Height_PID={0.8,0,0,0,0,9000};  //0.3
 PID_S ACCEL_SPEED_Z_PID={7,0,0,0,0,2};
-PID_S Velocity_PID={0.32,10,0.77,0,0,1000};
+PID_S Velocity_PID={0,0,0,0,0,1000};
 
 PID_S X_PID={0.1,0,0,0,0,9000};
 PID_S Y_PID={0.1,0,0,0,0,9000};
@@ -51,28 +58,26 @@ PID_S Y_PID={0.1,0,0,0,0,9000};
 
 Fly_State  State=STOP;
 
-Kal_Struct kal_acc_z={1,0,0.00001,0.0012,0,1};
-
 int position_x,position_y;
 
 void set_flag_command(char * flag,int arg_num,float * args);
 void Fly_Stop(void);
-
-int yaw_offset_init_ok=0;
 
 float * get_pid_ptr(char **s);
 
 
 void Fly_Init(void){      //解锁飞行，初始化高度、yaw
 	State=FLY_WAIT;
-	if(!yaw_offset_init_ok)
-		yaw_offset=Angle[2];
 	base_duty=0;           //FLY_WAIT状态，占空比可以手动更改
 	ROLL_PID.i=0;
 	PITCH_PID.i=0;
 	ANGLE_SPEED_Y_PID.i=0;
 	ANGLE_SPEED_X_PID.i=0;
 	ANGLE_SPEED_Z_PID.i=0;
+    
+    Height_PID.i=0;
+    yaw_target=Angle[YAW];
+    height_offset=Height;
 }
  
 
@@ -180,7 +185,6 @@ float * get_pid_ptr(char **s){
 
 inline void Fly_Stop(void){
 	State=STOP;
-	yaw_offset_init_ok=0;
 }
 
 
@@ -237,40 +241,6 @@ void set_target(int arg_num,char **s,float * args){
 }
 
 
-/*
-	这个函数用来处理yaw.
-	yaw_offset为刚起飞时候的yaw角度
-	返回当前yaw与起飞时的yaw的偏差
-*/
-
-float yaw_deal(){
-	float temp;
-	float result;    //返回处理过的yaw
-	temp=Angle[2]-yaw_offset;
-	if(temp>180||temp<-180){
-		if(temp>0){
-			result=temp-360;
-		}else{
-			result=temp+360;
-		}
-	}else{
-		result=temp;
-	} 
-	
-	if(result>180||result<-180){     //仍然大于或者小于180度，显然有错。
-			result=0;
-	}
-	return result;
-}
-
-enum attitude{
-  PITCH=0x00,
-  ROLL=0x01,
-  YAW=0x02,
-  X=0x00,
-  Y=0x01,
-  Z=0x02
-};
 
 
 inline void Motor_Stop(){
@@ -279,9 +249,10 @@ inline void Motor_Stop(){
   }
 }
 
-char Angle_Speed_Z_Flag=0;
-char Roll_Pitch_Flag=0;
+char Angle_Speed_Z_Flag=1;
+char Roll_Pitch_Flag=1;
 char Motor_Open_Flag=1;
+char Height_Open_Flag=0;
 
 inline void set_flag_command(char * flag,int arg_num,float * args){
 	if(arg_num>1){
@@ -296,6 +267,15 @@ inline void set_flag_command(char * flag,int arg_num,float * args){
 	uprintf("ok,set flag=%d\r\n",*flag);
 }
 
+void add_duty(int arg_num,char **s ,float *args){
+  if(arg_num!=0x0001){
+    uprintf("error arg_num!\r\n");
+    return ;
+  }
+  base_duty+=args[0];
+  Limit(base_duty,100);
+  uprintf("OK,base_duty=%f\r\n",base_duty);
+}
 void set_flag(int arg_num,char **s,float * args){
   if(arg_num!=0x0101&&arg_num!=0x0100){
     uprintf("error arg_num!\r\n");
@@ -307,25 +287,74 @@ void set_flag(int arg_num,char **s,float * args){
     set_flag_command(&Roll_Pitch_Flag,arg_num&0x0f,args);
   }else if(compare_string("motor",s[0])){
     set_flag_command(&Motor_Open_Flag,arg_num&0x0f,args);
+  }else if(compare_string("height",s[0])){
+    set_flag_command(&Height_Open_Flag,arg_num&0x0f,args);
   }
 }
 
-void Fly_Control(){		
+float get_yaw_err(float now,float target){
+  float sub,a_sub,result;
+  //正方向：逆时针
+  sub=target-now;
+  a_sub=fabs(sub);
+  if(a_sub>=180){
+    a_sub=360-a_sub;
+    result=-a_sub;
+  }else{
+    result=sub;
+  }
   
+  return result;
+  
+}
+
+/*
+thrust 油门
+direction 方向舵
+ele 升降舵
+aile 副翼
+*/
+void RC_Set_Target(float thrust,float direction,float ele,float aile){
+  if(thrust<1 && direction<1 && ele<1 && aile >95){
+    Fly_Init();
+    uprintf("set_fly!\r\n");
+  }else if(thrust <1 && ele <1 && direction>47 &&direction<51){
+    Fly_Stop();
+    uprintf("set_stop!\r\n");
+  }
+  base_duty=thrust;
+  
+  if(State!=STOP){
+    if(base_duty<20){
+      base_duty=20;
+    } 
+  }
+  roll_target=(10*ele/100-5);
+  pitch_target=-(10*aile/100-5);
+}
+
+
+
+void Fly_Control(){		
+  float Pitch_Out=0;
+  float Roll_Out=0;
+  float Yaw_Out=0;
+  float Velocity_Out=0;
   if(State==STOP){
     Motor_Stop();
     return ;
   }
   
   if(State!=STOP){
-    yaw_dealed=yaw_deal();
-    
-    Yaw_Out=PID_Control(&YAW_PID,yaw_target,yaw_dealed);
+    Yaw_Out=PID_Control(&YAW_PID,0,get_yaw_err(Angle[Z],yaw_target));
+    Limit(Yaw_Out,10);
     if(Angle_Speed_Z_Flag)
       Angle_Speed_Z_Out=PID_Control(&ANGLE_SPEED_Z_PID,Yaw_Out,Angle_Speed[Z]);
     else
       Angle_Speed_Z_Out=0;
   }
+  
+  //Limit(Angle_Speed_Z_Out,15);
   
   if(Roll_Pitch_Flag){ //外环开启
     Roll_Out=PID_Control(&ROLL_PID,roll_target,Angle[ROLL]);     //如果是调角速度内环，注释掉这句
@@ -337,6 +366,15 @@ void Fly_Control(){
     Pitch_Out=0;
   }
   
+  
+  if(Height_Open_Flag){
+    Velocity_Out=PID_Control(&Height_PID,height_target+height_offset,Height)+50;
+    //Velocity_Out=PID_Control(&Velocity_PID,0,Velocity[Z])+20;
+  }else{
+    Velocity_Out=0;
+  }
+  
+  
   Angle_Speed_X_Out=PID_Control(&ANGLE_SPEED_X_PID,Roll_Out,Angle_Speed[X]);
   Angle_Speed_Y_Out=PID_Control(&ANGLE_SPEED_Y_PID,Pitch_Out,Angle_Speed[Y]);
   
@@ -345,6 +383,7 @@ void Fly_Control(){
   CHn_Out[1]=-Angle_Speed_X_Out-Angle_Speed_Y_Out-Angle_Speed_Z_Out+base_duty+Velocity_Out;
   CHn_Out[2]=-Angle_Speed_X_Out+Angle_Speed_Y_Out+Angle_Speed_Z_Out+base_duty+Velocity_Out;
   CHn_Out[3]=Angle_Speed_X_Out+Angle_Speed_Y_Out-Angle_Speed_Z_Out+base_duty+Velocity_Out;
+  
   
   if(Motor_Open_Flag){
     for(int i=1;i<5;++i){ 

@@ -42,6 +42,7 @@ typedef struct{
 #define PROM_NB                 8
 
 extern MS5611_Dev MS5611;
+extern float MS5611_Height;
 void MS5611_Init(MS5611_Dev * dev);
-void MS5611_Read(MS5611_Dev *dev,float * height);
+void MS5611_Read(MS5611_Dev *dev);
 #endif

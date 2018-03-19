@@ -28,6 +28,8 @@ static void NRF_Analize_Message(uint8_t * data,uint16_t len);
 static void NRF_Write(uint8_t * txData,uint16_t len);
 static void NRF_Read(uint8_t * rxData,uint16_t len);
 
+extern void Delay_Us(uint32_t nus);
+
 void NRF_Init(NRF_Dev * dev){
   dev->set_gpio=NRF_Set_GPIO;
   dev->delay_ms=HAL_Delay;
@@ -39,6 +41,7 @@ void NRF_Init(NRF_Dev * dev){
   dev->rx_analize=NRF_Analize_Message;
   dev->spi_write=NRF_Write;
   dev->spi_read=NRF_Read;
+  dev->delay_us=Delay_Us;
   
   nrf_write_reg(dev,NRF_CONFIG,0x02);
   nrf_write_reg(dev,EN_AA,0X00); //禁止自动ACK
@@ -81,23 +84,66 @@ static void NRF_Read_Write(uint8_t * txData,uint8_t * rxData,uint16_t len){
   HAL_SPI_TransmitReceive(&hspi2,txData,rxData,len,50);
 }
 
-uint16_t nrf_command,nrf_thrust,nrf_direction,nrf_pitch,nrf_roll;
+float nrf_command,nrf_thrust,nrf_direction,nrf_ele,nrf_aile;
+
+extern void uprintf(char *fmt, ...);
+
+float TO_PERCENT(uint16_t data){
+  return data/65535.0f*100;
+}
+
+extern void RC_Set_Target(float thrust,float direction,float ele,float aile);
 static void NRF_Analize_Message(uint8_t * data,uint16_t len){
   //10 bytes
   //0-1 command
   //2-3 thrust
   //4-5 direction
-  //6-7 pitch
-  //8-9 roll
+  //6-7 ele
+  //8-9 aile
   
-  nrf_command=data[0]<<8|data[1];
-  nrf_thrust=data[2]<<8|data[3];
-  nrf_direction=data[4]<<8|data[5];
-  nrf_pitch=data[6]<<8|data[7];
-  nrf_roll=data[8]<<8|data[9];
+  nrf_command=TO_PERCENT(data[0]<<8|data[1]);
+  nrf_thrust=TO_PERCENT(data[2]<<8|data[3]);
+  nrf_direction=TO_PERCENT(data[4]<<8|data[5]);
+  nrf_ele=TO_PERCENT(data[6]<<8|data[7]);
+  nrf_aile=TO_PERCENT(data[8]<<8|data[9]);
   
+  //uprintf("t:%f d:%f p:%f r:%f\r\n",nrf_thrust,nrf_direction,nrf_ele,nrf_aile);
+  RC_Set_Target(nrf_thrust,nrf_direction,nrf_ele,nrf_aile);
+  //uprintf("%f\r\n",nrf_thrust);
 }
 
+
+
+void nrf_receive2(NRF_Dev *dev){
+	uint8_t t[32];
+	int i=0;
+    
+  if(dev->mode==NRF_RX){
+    dev->mode=NRF_WAIT;
+    if(nrf_read_reg(dev,STATUS)<0x40)         //未接收到数据
+      return ;  
+    nrf_write_reg(dev,STATUS,0xFF); 
+	dev->set_gpio(CSN,LOW);
+	dev->delay_us(10);
+	t[0]=R_RX_PAYLOAD;
+    dev->spi_write_read(t,t,1);
+	for(i=0;i<RX_PLOAD_WIDTH;i++){
+		t[i]=NOP;
+	}
+    dev->spi_write_read(t,dev->rx_data,dev->rx_len);
+    
+    dev->set_gpio(CE,LOW);
+	dev->set_gpio(CSN,HIGH);
+    dev->rx_analize(dev->rx_data,dev->rx_len);  
+    nrf_write_reg(dev,FLUSH_RX,0);
+    nrf_write_reg(dev,NRF_CONFIG,NRF_WAIT);
+  }else{   //mode==wait
+    dev->mode=NRF_RX;
+    nrf_write_reg(dev,FLUSH_RX,0xFF);
+    dev->set_gpio(CE,HIGH);
+	nrf_write_reg(dev,NRF_CONFIG,NRF_RX);
+  }
+}
 
 void nrf_receive(NRF_Dev * dev){
 	uint8_t t[32];
@@ -105,12 +151,12 @@ void nrf_receive(NRF_Dev * dev){
     nrf_write_reg(dev,FLUSH_RX,0xFF);
     dev->set_gpio(CE,HIGH);
 	nrf_write_reg(dev,NRF_CONFIG,0x03);
-	HAL_Delay(1);
+	dev->delay_ms(1);
 	if(nrf_read_reg(dev,STATUS)<0x40)         //未接收到数据
 		return ;
     nrf_write_reg(dev,STATUS,0xFF); 
 	dev->set_gpio(CSN,LOW);
-	HAL_Delay(1);
+	dev->delay_ms(1);
 	t[0]=R_RX_PAYLOAD;
     dev->spi_write_read(t,t,1);
 	for(i=0;i<RX_PLOAD_WIDTH;i++){
@@ -138,7 +184,7 @@ void nrf_send_message(NRF_Dev * dev){
     
 	dev->set_gpio(CSN,HIGH);
 	dev->set_gpio(CE,HIGH);
-	HAL_Delay(1);
+	dev->delay_ms(1);
 	do{
 		t=nrf_read_reg(dev,STATUS);
         if((t&0x10)==0x10){
@@ -154,18 +200,15 @@ void nrf_send_message(NRF_Dev * dev){
 static void nrf_write_reg(NRF_Dev * dev,uint8_t reg,uint8_t tx){
 	uint8_t r,t;
 	REDO:
-    //dev->set_gpio(CE,LOW);
 	dev->set_gpio(CSN,LOW);
-    dev->delay_ms(1);
+    //dev->delay_us(1);
 	t=W_REGISTER+reg;
     dev->spi_write(&t,1);
-    //dev->spi_write_read(&t,&r,1);
-    
 	t=tx;
-	dev->delay_ms(1);
+	//dev->delay_us(10);
 	dev->spi_write(&t,1);
 	dev->set_gpio(CSN,HIGH);
-	dev->delay_ms(1);
+	//dev->delay_ms(1);
 	if(reg==STATUS||reg==FLUSH_RX)
       return ;
 	if(nrf_read_reg(dev,reg)!=tx){
@@ -180,12 +223,12 @@ static void nrf_write_bytes(NRF_Dev * dev,uint8_t reg,uint8_t * data,uint8_t siz
 		return ;
 	INIT:
     dev->set_gpio(CSN,LOW);
-    dev->delay_ms(1);
+    //dev->delay_ms(1);
 	t=W_REGISTER+reg;
     dev->spi_write_read(&t,&r,1);
     dev->spi_write_read(data,rx_buffer,size);
 	dev->set_gpio(CSN,HIGH);
-	dev->delay_ms(1);
+	//dev->delay_ms(1);
 	
 	nrf_read_bytes(dev,reg,rx_buffer,size);
 	for(i=0;i<size;++i){
@@ -211,14 +254,15 @@ static void nrf_read_bytes(NRF_Dev * dev,uint8_t reg,uint8_t * rx_buffer,uint8_t
 
 static uint8_t nrf_read_reg(NRF_Dev * dev,uint8_t reg){
 	uint8_t t,r; 
+    t=reg;
 	dev->set_gpio(CSN,LOW);
-	t=reg;
-    dev->delay_ms(1);
+	
+    //dev->delay_ms(1);
     dev->spi_write(&t,1);
-    dev->delay_ms(1);   
+    //dev->delay_ms(1);   
 	t=NOP;
     dev->spi_read(&r,1);
-	dev->delay_ms(1);   
+	//dev->delay_ms(1);   
 	dev->set_gpio(CSN,HIGH);
 	return r;
 }

@@ -1,6 +1,7 @@
 #ifndef NRF24L01
 #define NRF24L01
 #include "stm32f4xx_hal.h"
+#include "function_ptr.h"
 
 typedef enum{
   CSN,
@@ -18,6 +19,7 @@ typedef void (*nrf_read_or_write_fptr)(uint8_t * Data,uint16_t len);
 typedef void (*nrf_delay_ms_fptr)(uint32_t t);
 typedef void (*nrf_set_gpio_fptr)(NRF_GPIO io,NRF_GPIO_Level level);
 typedef void (*nrf_rx_analize_fptr)(uint8_t * data,uint16_t len);
+ 
 typedef enum{
   NRF_TX=2,
   NRF_RX=3,
@@ -28,13 +30,15 @@ typedef struct {
   nrf_com_fptr spi_write_read;
   nrf_read_or_write_fptr spi_write;
   nrf_read_or_write_fptr spi_read;
-  nrf_delay_ms_fptr delay_ms;
+  delay_ms_fptr delay_ms;
+  delay_us_fptr  delay_us;
   nrf_set_gpio_fptr set_gpio;
   nrf_rx_analize_fptr rx_analize;
   uint8_t * tx_data;
   uint16_t tx_len;
   uint8_t * rx_data;
   uint16_t rx_len;
+  NRF_Mode mode;
 }NRF_Dev;
 
 
@@ -86,4 +90,5 @@ void rx_(uint8_t *data);
 void NRF_Init(NRF_Dev * dev);
 void nrf_receive(NRF_Dev * dev);
 void nrf_send_message(NRF_Dev * dev);
+void nrf_receive2(NRF_Dev *dev);
 #endif

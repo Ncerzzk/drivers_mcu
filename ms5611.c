@@ -1,13 +1,12 @@
 #include "ms5611.h"
+#include "base.h"
 
 static uint32_t ms5611_ut;  // static result of temperature measurement
 static uint32_t ms5611_up;  // static result of pressure measurement
 static uint16_t ms5611_c[PROM_NB];  // on-chip ROM
 
 MS5611_Dev MS5611;
-
-
-
+float MS5611_Height;
 
 extern I2C_HandleTypeDef hi2c3;
 uint8_t I2C_Write_Buffer(uint8_t slaveAddr, uint8_t writeAddr, uint8_t *pBuffer,uint16_t len);
@@ -134,11 +133,18 @@ static void ms5611_calculate(int32_t *pressure, int32_t *temperature)
         *pressure = press;
     if (temperature)
         *temperature = temp;
+    
+    //uprintf("p:%d   t:%d\r\n",press,temp);
 }
 
 
 void uprintf(char *fmt, ...);
-void MS5611_Read(MS5611_Dev *dev,float * height){
+Kal_Struct kal_height={1,0,0.01,0.15,0,1};
+
+extern void Get_Height(float *vz,float refer_height,int call_time,float *height);
+extern float Velocity[3];
+extern float Height;
+void MS5611_Read(MS5611_Dev *dev){
   int32_t pressure,temperature;
   
   if(dev->call_cycle>=dev->adc_time){
@@ -165,7 +171,9 @@ void MS5611_Read(MS5611_Dev *dev,float * height){
     ms5611_ut=ms5611_read_adc(dev);
     ms5611_calculate(&pressure,&temperature);
     dev->step=0;
-    *height=(101325-pressure)*10;
+    MS5611_Height=(101325-pressure)*10.0f;
+    Get_Height(&Velocity[2],MS5611_Height,30,&Height);
+    //MS5611_Height=KalMan(&kal_height,(101325-pressure)*10); //单位cm
     //uprintf("%d\r\n",pressure);
     break;
   }

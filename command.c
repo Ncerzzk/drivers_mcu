@@ -29,6 +29,7 @@ extern void add_pid(int arg_num,char **s,float *args);
 extern void set_flag(int arg_num,char **s,float * args);
 extern void set_target(int arg_num,char **s,float * args);
 
+extern void add_duty(int arg_num,char **s ,float *args);
 extern char buffer_rx_temp;
 
 
@@ -53,6 +54,8 @@ void command_init(void){
     
     add_cmd("set_flag",set_flag);
     add_cmd("set_target",set_target);
+    
+    add_cmd("add_duty",add_duty);
     
 }
 
