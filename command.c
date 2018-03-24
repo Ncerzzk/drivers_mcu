@@ -11,25 +11,14 @@ struct {
 }CMD;
 
 static void test(int arg_num,char **string_prams,float * arg);
-extern void set_debug_wave(int arg_num,char ** string_prams,float * float_prams);
-extern void set_speed(int arg_num,char ** string_prams,float * float_prams);
-extern void write_prams(int arg_num,char ** s,float * args);
-extern void load_prams(int arg_num,char ** s,float * args);
-extern void set_send_wave_flag(int arg_num,char **s,float * arg);
-extern void set_wave_gain(int arg_num,char **s,float * args);
-extern void adjust_accel_mag(int arg_num,char **s,float * arg);
-extern void adjust_gyro(int arg_num,char **s,float * arg);
-extern void end(int arg_num,char **s,float *arg);
-
-extern void set_fly(int arg_num,char **s,float * args);
-extern void set_stop(int arg_num,char **s,float * args);
-extern void set_pid(int arg_num,char **s,float * args);
-extern void add_pid(int arg_num,char **s,float *args);
-
-extern void set_flag(int arg_num,char **s,float * args);
-extern void set_target(int arg_num,char **s,float * args);
-
-extern void add_duty(int arg_num,char **s ,float *args);
+void set_steer(int arg_num,char **s,float *args);
+void set_flag(int arg_num,char **s,float * args);
+void set_pid(int arg_num,char **s,float * args);
+void set_debug_wave(int arg_num,char ** string_prams,float * float_prams);
+void set_wave_gain(int arg_num,char **s,float * args);
+void load_prams(int arg_num,char ** s,float * args);
+void write_prams(int arg_num,char ** s,float * args);
+void set_send_wave_flag(int arg_num,char **s,float * arg);
 extern char buffer_rx_temp;
 
 
@@ -38,24 +27,18 @@ extern char buffer_rx_temp;
 */
 void command_init(void){
 	add_cmd("test",test);
-    add_cmd("set_speed",set_speed);
-    add_cmd("write",write_prams);
-    add_cmd("load",load_prams);
-    add_cmd("set_wave_flag",set_send_wave_flag);
-    add_cmd("set_wave_gain",set_wave_gain);
-    add_cmd("adjust",adjust_accel_mag);
-    add_cmd("adjust_gyro",adjust_gyro);
-    add_cmd("set_wave",set_debug_wave);  
     
-    add_cmd("set_fly",set_fly);
-    add_cmd("stop",set_stop);
-    add_cmd("add_pid",add_pid);
+    add_cmd("set_steer",set_steer);
+    add_cmd("set_flag",set_flag);
+    
     add_cmd("set_pid",set_pid);
     
-    add_cmd("set_flag",set_flag);
-    add_cmd("set_target",set_target);
+    add_cmd("set_wave",set_debug_wave);
+    add_cmd("set_wave_gain",set_wave_gain);
+    add_cmd("set_wave_flag",set_send_wave_flag);
     
-    add_cmd("add_duty",add_duty);
+    add_cmd("load",load_prams);
+    add_cmd("write",write_prams);
     
 }
 
@@ -72,12 +55,7 @@ uint8_t check_prams(int16_t arg_num,int string_prams,int float_prams){
   return 1;
 }
 
-void end(int arg_num,char **s,float *arg){
-  set_send_wave_flag(1,0,0);
-  adjust_accel_mag(0x0101,0,0);
-  
-  uprintf("OK,cancel all flag!\r\n");
-}
+
 
 static void test(int arg_num,char **string_prams,float * arg){
     int i;
@@ -130,7 +108,7 @@ static int16_t get_prams(char *s,char *** string_prams,float ** float_prams){
   *string_prams=string_buffer;
   
   i=0;
-  while(s[i]!='\0'&&num_float_i<=FLOAT_PRAM_NUM&&num_string_i<=STRING_PRAM_NUM&&num_i_i<10){
+  while(s[i]!='\0'&&s[i]!='\r'&&num_float_i<=FLOAT_PRAM_NUM&&num_string_i<=STRING_PRAM_NUM&&num_i_i<10){
     if(s[i]!=' '){//到达非空格
       if(in_flag==IN_SPACE){  //在数字中标志位和字符串标志位未设置,即从空格之后出现的第一个数字/字符
         if(isalpha(s[i])){
@@ -209,7 +187,7 @@ char compare_cmd(const char * cmd,char * s){
             return 0;
         ++i;
     }
-    if(s[i]!=' '&&s[i]!='\0'){
+    if(s[i]!=' '&&s[i]!='\0'&&s[i]!='\r'){
         return 0;   //比如命令hello 与命令 helloworld的情况，没有这个判断，会吧后者误认为前者
     }
     return i;

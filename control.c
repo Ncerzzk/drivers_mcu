@@ -18,7 +18,7 @@ enum attitude{
 
 //期望的俯仰、横滚、偏航角
 float pitch_target=0;     //3.25
-float roll_target=0;  //48.5
+float roll_target=6;  //48.5
 float yaw_target=0;
 float height_target=50;   //单位cm
 float height_offset=0;  
@@ -40,8 +40,8 @@ float CHn_Out[4];
 //PID 结构体参数
 //带Single是单级PID
 
-PID_S ROLL_PID={0.2,0,0,0,0,2};    //{0.1,0,0,0,0,2}
-PID_S PITCH_PID={0.2,0,0,0,0,2}; //{0.1,0,0,0,0,2}
+PID_S ROLL_PID={-0.015,-0.045,0,0,0,2};    //{0.1,0,0,0,0,2}
+PID_S PITCH_PID={0.025,0.075,0,0,0,2}; //{0.1,0,0,0,0,2}
 PID_S YAW_PID={-0.1,0,0,0,0,2};
 	
 PID_S ANGLE_SPEED_Y_PID={-30,-100,-1,0,0,20};  //{-10,-20,-1,0,0,5}
@@ -63,7 +63,7 @@ int position_x,position_y;
 void set_flag_command(char * flag,int arg_num,float * args);
 void Fly_Stop(void);
 
-float * get_pid_ptr(char **s);
+static float * get_pid_ptr(char **s);
 
 
 void Fly_Init(void){      //解锁飞行，初始化高度、yaw
@@ -137,7 +137,7 @@ void add_pid(int arg_num,char **s,float *args){
   uprintf("OK ,set %s %s = %f\r\n",s[0],s[1],*pid_ptr);  
 }
 
-float * get_pid_ptr(char **s){
+static float * get_pid_ptr(char **s){
   char * control_type=s[0];
   char * pid_type=s[1];
   PID_S *ptr=0;
@@ -241,14 +241,6 @@ void set_target(int arg_num,char **s,float * args){
 }
 
 
-
-
-inline void Motor_Stop(){
-  for(int i=1;i<=4;++i){
-	Set_Speed(i,0);
-  }
-}
-
 char Angle_Speed_Z_Flag=1;
 char Roll_Pitch_Flag=1;
 char Motor_Open_Flag=1;
@@ -333,62 +325,26 @@ void RC_Set_Target(float thrust,float direction,float ele,float aile){
   pitch_target=-(10*aile/100-5);
 }
 
+Steer ELE_Steer={TIM3,3,1,2};
+Steer AILE_Steer={TIM3,2,1,2.6};
+void Fly_Control(){	
+  float Roll_Out,Pitch_Out,Yaw_Out;
+  Yaw_Out=PID_Control(&YAW_PID,0,get_yaw_err(Angle[Z],yaw_target));
 
-
-void Fly_Control(){		
-  float Pitch_Out=0;
-  float Roll_Out=0;
-  float Yaw_Out=0;
-  float Velocity_Out=0;
-  if(State==STOP){
-    Motor_Stop();
-    return ;
-  }
+  Roll_Out=PID_Control(&ROLL_PID,roll_target,Angle[ROLL]); 
+  Pitch_Out=PID_Control(&PITCH_PID,pitch_target,Angle[PITCH]);
   
-  if(State!=STOP){
-    Yaw_Out=PID_Control(&YAW_PID,0,get_yaw_err(Angle[Z],yaw_target));
-    Limit(Yaw_Out,10);
-    if(Angle_Speed_Z_Flag)
-      Angle_Speed_Z_Out=PID_Control(&ANGLE_SPEED_Z_PID,Yaw_Out,Angle_Speed[Z]);
-    else
-      Angle_Speed_Z_Out=0;
-  }
-  
-  //Limit(Angle_Speed_Z_Out,15);
-  
-  if(Roll_Pitch_Flag){ //外环开启
-    Roll_Out=PID_Control(&ROLL_PID,roll_target,Angle[ROLL]);     //如果是调角速度内环，注释掉这句
-    Limit(Roll_Out,10);
-    Pitch_Out=PID_Control(&PITCH_PID,pitch_target,Angle[PITCH]);  //如果是调角速度内环，注释掉这句
-    Limit(Pitch_Out,10);
-  }else{//外环关闭
-    Roll_Out=0;
-    Pitch_Out=0;
-  }
-  
-  
-  if(Height_Open_Flag){
-    Velocity_Out=PID_Control(&Height_PID,height_target+height_offset,Height)+50;
-    //Velocity_Out=PID_Control(&Velocity_PID,0,Velocity[Z])+20;
-  }else{
-    Velocity_Out=0;
-  }
-  
-  
-  Angle_Speed_X_Out=PID_Control(&ANGLE_SPEED_X_PID,Roll_Out,Angle_Speed[X]);
-  Angle_Speed_Y_Out=PID_Control(&ANGLE_SPEED_Y_PID,Pitch_Out,Angle_Speed[Y]);
-  
-  //串级PID
-  CHn_Out[0]=Angle_Speed_X_Out-Angle_Speed_Y_Out+Angle_Speed_Z_Out+base_duty+Velocity_Out;  //以角度向前倾，向左倾为标准
-  CHn_Out[1]=-Angle_Speed_X_Out-Angle_Speed_Y_Out-Angle_Speed_Z_Out+base_duty+Velocity_Out;
-  CHn_Out[2]=-Angle_Speed_X_Out+Angle_Speed_Y_Out+Angle_Speed_Z_Out+base_duty+Velocity_Out;
-  CHn_Out[3]=Angle_Speed_X_Out+Angle_Speed_Y_Out-Angle_Speed_Z_Out+base_duty+Velocity_Out;
-  
-  
-  if(Motor_Open_Flag){
-    for(int i=1;i<5;++i){ 
-      Set_Speed(i,CHn_Out[i-1]);
-    }
+  if(Roll_Pitch_Flag){
+    Set_Steer(&ELE_Steer,Roll_Out);
+    Set_Steer(&AILE_Steer,Pitch_Out);
   }
 }
+
+
+
+
+
+/*
+width:脉宽 单位:ms
+*/
 
