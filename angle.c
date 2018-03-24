@@ -250,9 +250,9 @@ void IMU_Update(float * ac,float * gy,float *attitude,float *ace){
     q1/=norm;
     q2/=norm;
     q3/=norm;
-    attitude[0]= asin(-2*q1*q3 + 2*q0*q2)* 57.3f;           //pitch
-    attitude[1]= atan2(2*q2*q3 + 2*q0*q1, -2*q1*q1 - 2*q2*q2+1)* 57.3f;   //roll
-    attitude[2]= atan2(2*q1q2 + 2*q0q3, -2*q2q2 - 2*q3q3+1)* 57.3f;         //yaw
+    attitude[0]= asin(-2*q1*q3 + 2*q0*q2)* 57.3f;           
+    attitude[1]= atan2(2*q2*q3 + 2*q0*q1, -2*q1*q1 - 2*q2*q2+1)* 57.3f;   
+    attitude[2]= atan2(2*q1q2 + 2*q0q3, -2*q2q2 - 2*q3q3+1)* 57.3f;         
 }
  
 
@@ -362,9 +362,9 @@ void AHR_Update(float * ac,float * gy,float * mag,float * attitude,float *ace){
     q2/=norm;
     q3/=norm;
 
-    attitude[0]= asin(-2*q1*q3 + 2*q0*q2)* 57.3f;           //pitch
-    attitude[1]= atan2(2*q2*q3 + 2*q0*q1, -2*q1*q1 - 2*q2*q2+1)* 57.3f;   //roll
-    attitude[2]= atan2(2*q1q2 + 2*q0q3, -2*q2q2 - 2*q3q3+1)* 57.3f;         //yaw
+    attitude[0]= asin(-2*q1*q3 + 2*q0*q2)* 57.3f;         
+    attitude[1]= atan2(2*q2*q3 + 2*q0*q1, -2*q1*q1 - 2*q2*q2+1)* 57.3f;   
+    attitude[2]= atan2(2*q1q2 + 2*q0q3, -2*q2q2 - 2*q3q3+1)* 57.3f;         
     
 }
 

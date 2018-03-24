@@ -23,6 +23,15 @@ typedef struct{
   int i;
 }Window_Filter_Struct;
 
+typedef struct{
+    float UTC_TIME;
+    unsigned char State;
+    double Lat;
+    double Long;
+    float v;
+}GPRMC;
+
+
 float Window_Filter(Window_Filter_Struct * wfs,float data);
 
 float KalMan(Kal_Struct *kal,float x);
@@ -30,4 +39,6 @@ float KalMan(Kal_Struct *kal,float x);
 extern char Send_Wave_Flag;
 void set_debug_wave(int arg_num,char ** string_prams,float * float_prams);
 void debug_send_wave();
+
+
 #endif

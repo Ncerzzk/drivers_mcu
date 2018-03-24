@@ -6,9 +6,13 @@
 #define HEIGHT_T  120
 #define UP_DUTY			60
 
+/*
+以目前该电路板安装在飞机上的方向来说，Pitch应该修改为1，Roll应该修改为0
+2018.3.24
+*/
 enum attitude{
-  PITCH=0x00,
-  ROLL=0x01,
+  PITCH=0x01,
+  ROLL=0x00,
   YAW=0x02,
   X=0x00,
   Y=0x01,
@@ -17,8 +21,8 @@ enum attitude{
 
 
 //期望的俯仰、横滚、偏航角
-float pitch_target=0;     //3.25
-float roll_target=6;  //48.5
+float pitch_target=6;     //3.25
+float roll_target=0;  //
 float yaw_target=0;
 float height_target=50;   //单位cm
 float height_offset=0;  
@@ -40,12 +44,12 @@ float CHn_Out[4];
 //PID 结构体参数
 //带Single是单级PID
 
-PID_S ROLL_PID={-0.015,-0.045,0,0,0,2};    //{0.1,0,0,0,0,2}
-PID_S PITCH_PID={0.025,0.075,0,0,0,2}; //{0.1,0,0,0,0,2}
+PID_S ROLL_PID={0.2,0,0,0,0,2};    //{-0.015,-0.045,0,0,0,2}
+PID_S PITCH_PID={0.2,0,0,0,0,2}; //{0.1,0,0,0,0,2}
 PID_S YAW_PID={-0.1,0,0,0,0,2};
 	
-PID_S ANGLE_SPEED_Y_PID={-30,-100,-1,0,0,20};  //{-10,-20,-1,0,0,5}
-PID_S ANGLE_SPEED_X_PID={-30,-100,-1,0,0,20};
+PID_S ANGLE_SPEED_Y_PID={10,20,0,0,0,20};  //{-10,-20,-1,0,0,5}
+PID_S ANGLE_SPEED_X_PID={-10,-20,0,0,0,20};
 PID_S ANGLE_SPEED_Z_PID={-10,-20,0,0,0,20}; //{-20,-20,0,0,0,5};
 
 PID_S Height_PID={0.8,0,0,0,0,9000};  //0.3
@@ -321,23 +325,40 @@ void RC_Set_Target(float thrust,float direction,float ele,float aile){
       base_duty=20;
     } 
   }
-  roll_target=(10*ele/100-5);
-  pitch_target=-(10*aile/100-5);
+  roll_target=-(10*aile/100-5);
+  pitch_target=(10*aile/100-5);
 }
 
 Steer ELE_Steer={TIM3,3,1,2};
 Steer AILE_Steer={TIM3,2,1,2.6};
 void Fly_Control(){	
   float Roll_Out,Pitch_Out,Yaw_Out;
-  Yaw_Out=PID_Control(&YAW_PID,0,get_yaw_err(Angle[Z],yaw_target));
-
-  Roll_Out=PID_Control(&ROLL_PID,roll_target,Angle[ROLL]); 
-  Pitch_Out=PID_Control(&PITCH_PID,pitch_target,Angle[PITCH]);
+  float Angle_X_Out,Angle_Y_Out,Angle_Z_Out;
+  if(Angle_Speed_Z_Flag){
+    Yaw_Out=PID_Control(&YAW_PID,0,get_yaw_err(Angle[Z],yaw_target));
+  }else{
+    Yaw_Out=0;
+  }
+  
+  //再将Yaw_Out * k 来控制方向舵
+  //同时将Yaw_Out * k2 来补偿一下升降舵，以补偿转弯带来的掉高度。
+  //但是，方向舵还没装。
   
   if(Roll_Pitch_Flag){
-    Set_Steer(&ELE_Steer,Roll_Out);
-    Set_Steer(&AILE_Steer,Pitch_Out);
+//    Set_Steer(&AILE_Steer,Roll_Out);
+//    Set_Steer(&ELE_Steer,Pitch_Out);
+    Roll_Out=PID_Control(&ROLL_PID,Yaw_Out,Angle[ROLL]); 
+    Pitch_Out=PID_Control(&PITCH_PID,pitch_target,Angle[PITCH]);
+  }else{
+    Roll_Out=0;
+    Pitch_Out=0;
   }
+  Angle_X_Out=PID_Control(&ANGLE_SPEED_X_PID,Pitch_Out,Angle_Speed[X]);
+  Angle_Y_Out=PID_Control(&ANGLE_SPEED_Y_PID,Roll_Out,Angle_Speed[Y]);
+  Limit(Angle_X_Out,100);
+  Limit(Angle_Y_Out,100);
+  Set_Steer(&AILE_Steer,Angle_Y_Out);
+  Set_Steer(&ELE_Steer,Angle_X_Out);
 }
 
 

@@ -276,3 +276,42 @@ void load_prams(int arg_num,char ** s,float * args){
 	}
 	
 }
+
+unsigned char Analize_GPS(char * raw_data,GPRMC * r){
+    int i=0;
+    char *ptr=0;
+    for(ptr=strtok(raw_data,","),i=1;ptr!=0;ptr=strtok(0,","),++i){
+        switch(i){
+        case 2:
+            r->UTC_TIME=atof(ptr);
+            break;
+        case 4:
+            r->Lat=atof(ptr);
+            break;
+        case 5:
+            if(*ptr=='N'){
+                r->Lat*=1;
+            }else{
+                r->Lat*=-1;
+            }
+            break;
+        case 6:
+            r->Long=atof(ptr);
+            break;
+        case 7:
+            if(*ptr=='E'){
+                r->Long*=1;
+            }else{
+                r->Long*=-1;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    if(i<7){
+        return 0;
+    }else{
+        return 1;
+    }
+}
