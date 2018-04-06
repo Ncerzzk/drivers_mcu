@@ -30,7 +30,41 @@ typedef enum{
 	STOP=3,
 }Fly_State;
 
+extern PID_S ROLL_PID;    //{0.1,0,0,0,0,2}
+extern PID_S PITCH_PID; //{0.1,0,0,0,0,2}
+extern PID_S YAW_PID;
+	
+extern PID_S ANGLE_SPEED_Y_PID;  //{-30,-100,-1,0,0,20   旧飞机
+extern PID_S ANGLE_SPEED_X_PID;
+extern PID_S ANGLE_SPEED_Z_PID; //{-20,-20,0,0,0,5};
+
+extern PID_S Height_PID;  //0.3
+extern PID_S ACCEL_SPEED_Z_PID;
+extern PID_S Velocity_Z_PID;
+
+extern PID_S X_PID;
+extern PID_S Y_PID;
+
 extern Fly_State  State;
+
+extern char Angle_Speed_Z_Flag;
+extern char Roll_Pitch_Flag;
+extern char Motor_Open_Flag;
+extern char Height_Open_Flag;
+extern char NRF_Flag;
+extern float base_duty;
+
+extern float balance_roll;   //平衡位置的角度
+extern float balance_pitch;  //平衡位置的角度
+
+extern float pitch_target;     //3.25
+extern float roll_target;  //48.5
+extern float yaw_target;
+extern float height_target;
+extern float height_offset;
 void Fly_Control();
 
+void Fly_Init();
+void Fly_Stop();
+uint8_t Is_Flying();
 #endif

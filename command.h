@@ -2,7 +2,7 @@
 #define COMMAND_H
 #include "stm32f4xx_hal.h"
 
-#define CMD_MAX_NUM 30
+#define CMD_MAX_NUM 50
 static int get_float(char *s,int float_num,float *floats);
 typedef void (*cmdFunc)(int arg_num,char ** string_arg,float * float_arg);
 

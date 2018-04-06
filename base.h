@@ -5,6 +5,19 @@
 #include "stm32f4xx_hal.h"
 float avarge(int *data,int count);
 
+typedef struct{
+  char * wave_string;
+  float * wave_ptr;
+}wave_node;
+extern wave_node Wave_Array[];
+typedef struct{
+    float UTC_TIME;
+    unsigned char State;
+    double Lat;
+    double Long;
+    float v;
+}GPRMC;
+
 typedef struct _kal_struct{
 	float A;   //一般为1
 	float B;   //一般为0
@@ -16,6 +29,14 @@ typedef struct _kal_struct{
 	float cov; //上一次卡尔曼的输出的协方差
 	
 }Kal_Struct;
+
+typedef struct{
+  float *buffer;
+  int i;
+  int max;
+  uint8_t is_full;
+}History_Buffer;
+
 
 typedef struct{
   float * Window_Buffer;
@@ -30,4 +51,28 @@ float KalMan(Kal_Struct *kal,float x);
 extern char Send_Wave_Flag;
 void set_debug_wave(int arg_num,char ** string_prams,float * float_prams);
 void debug_send_wave();
+void load_prams(int arg_num,char ** s,float * args);
+unsigned char Analize_GPS(char * raw_data,GPRMC * r);
+void HB_Push(History_Buffer * hb,float data);
+void HB_Clear(History_Buffer * hb);
+int HB_Now(History_Buffer *hb);
+float HB_Get(History_Buffer * hb,int index);
+
+typedef struct
+{
+ //volatile 
+   float Input_Butter[3];
+ //volatile 
+   float Output_Butter[3];
+}Butter_BufferData;
+
+
+typedef struct
+{
+  float a[3];
+  float b[3];
+}Butter_Parameter;
+
+float LPButterworth(float curr_input,Butter_BufferData *Buffer,Butter_Parameter *Parameter);
+void get_info(int arg_num,char **s,float *args);
 #endif

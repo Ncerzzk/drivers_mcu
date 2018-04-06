@@ -30,6 +30,8 @@ extern void set_flag(int arg_num,char **s,float * args);
 extern void set_target(int arg_num,char **s,float * args);
 
 extern void add_duty(int arg_num,char **s ,float *args);
+extern void get_info(int arg_num,char **s,float *args);
+extern void set_k_h(int arg_num,char **s,float *args);
 extern char buffer_rx_temp;
 
 
@@ -46,7 +48,6 @@ void command_init(void){
     add_cmd("adjust",adjust_accel_mag);
     add_cmd("adjust_gyro",adjust_gyro);
     add_cmd("set_wave",set_debug_wave);  
-    
     add_cmd("set_fly",set_fly);
     add_cmd("stop",set_stop);
     add_cmd("add_pid",add_pid);
@@ -56,6 +57,10 @@ void command_init(void){
     add_cmd("set_target",set_target);
     
     add_cmd("add_duty",add_duty);
+    
+    add_cmd("get_info",get_info);
+    
+    add_cmd("set_k",set_k_h);
     
 }
 

@@ -85,7 +85,7 @@ static void NRF_Read_Write(uint8_t * txData,uint8_t * rxData,uint16_t len){
 }
 
 float nrf_command,nrf_thrust,nrf_direction,nrf_ele,nrf_aile;
-
+uint32_t nrf_watch_dog;
 extern void uprintf(char *fmt, ...);
 
 float TO_PERCENT(uint16_t data){
@@ -109,6 +109,7 @@ static void NRF_Analize_Message(uint8_t * data,uint16_t len){
   
   //uprintf("t:%f d:%f p:%f r:%f\r\n",nrf_thrust,nrf_direction,nrf_ele,nrf_aile);
   RC_Set_Target(nrf_thrust,nrf_direction,nrf_ele,nrf_aile);
+  nrf_watch_dog=0;
   //uprintf("%f\r\n",nrf_thrust);
 }
 
@@ -256,13 +257,9 @@ static uint8_t nrf_read_reg(NRF_Dev * dev,uint8_t reg){
 	uint8_t t,r; 
     t=reg;
 	dev->set_gpio(CSN,LOW);
-	
-    //dev->delay_ms(1);
-    dev->spi_write(&t,1);
-    //dev->delay_ms(1);   
+    dev->spi_write(&t,1);  
 	t=NOP;
     dev->spi_read(&r,1);
-	//dev->delay_ms(1);   
 	dev->set_gpio(CSN,HIGH);
 	return r;
 }

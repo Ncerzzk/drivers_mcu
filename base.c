@@ -2,6 +2,7 @@
 #include "angle.h"
 #include "command.h"
 #include "string.h"
+#include "control.h"
 
 char Send_Wave_Flag=0;
 extern UART_HandleTypeDef huart2;
@@ -18,6 +19,11 @@ extern float MS5611_Height;
 
 extern float Height;
 extern float Accel_WFS[3];
+extern int16_t Gyro_Offset[3];
+
+extern float Mag[3];
+
+extern char NRF_Flag;
 
 char Wave_Set[4]; //波形设置,写入flash中
 
@@ -27,25 +33,35 @@ typedef struct{
   size_t size;
 }pram_node;
 
-#define PRAM_NUM    5
-#define FLASH_Start 0x080A0000
+#define FLASH_Start 0x080A0000     //第九页
 
-pram_node Pram_Array[PRAM_NUM]={
+pram_node Pram_Array[]={
   {"wave1",Wave_Set,sizeof(Wave_Set[0])},
   {"wave2",Wave_Set+1,sizeof(Wave_Set[0])},
   {"wave3",Wave_Set+2,sizeof(Wave_Set[0])},
   {"wave4",Wave_Set+3,sizeof(Wave_Set[0])},
-  {"wave_g",&wave_gain,sizeof(wave_gain)}
+  {"wave_g",&wave_gain,sizeof(wave_gain)},
+  
+  {"gyro_offset_x",Gyro_Offset+0,sizeof(Gyro_Offset[0])},
+  {"gyro_offset_y",Gyro_Offset+1,sizeof(Gyro_Offset[0])},
+  {"gyro_offset_z",Gyro_Offset+2,sizeof(Gyro_Offset[0])},
+  
+  {"NRF_USE",&NRF_Flag,sizeof(NRF_Flag)},
+  
+  {"ACE_Z_Offset",&ACE_Z_Offset,sizeof(ACE_Z_Offset)},
+  {"Height_Open",&Height_Open_Flag,sizeof(Height_Open_Flag)},
+  {"Motor_Open",&Motor_Open_Flag,sizeof(Motor_Open_Flag)},
+  {"Roll_Pitch_Open",&Roll_Pitch_Flag,sizeof(Roll_Pitch_Flag)},
+  {"Angle_Z_Open",&Angle_Speed_Z_Flag,sizeof(Angle_Speed_Z_Flag)}
 };
 
 
-#define WAVE_TYPE_NUM 24
+#define WAVE_TYPE_NUM 33
 
-typedef struct{
-  char * wave_string;
-  float * wave_ptr;
-}wave_node;
-
+extern float a_correct[3];
+extern float v_correct[3],s_correct[3];
+extern float inter_height[3];
+extern float inter_v[3];
 wave_node Wave_Array[WAVE_TYPE_NUM]={
   {"wx",Angle_Speed+0},
   {"wy",Angle_Speed+1},
@@ -78,7 +94,20 @@ wave_node Wave_Array[WAVE_TYPE_NUM]={
   
   {"axw",Accel_WFS+0},
   {"ayw",Accel_WFS+1},
-  {"azw",Accel_WFS+2}
+  {"azw",Accel_WFS+2},
+  
+  {"mx",Mag+0},
+  {"my",Mag+1},
+  {"mz",Mag+2},
+  
+  {"hoffset",&height_offset},
+  
+  {"acorrect",a_correct+2},
+  {"vcorrect",v_correct+2},
+  {"scorrect",s_correct+2},
+  
+  {"interv",inter_v+2},
+  {"inters",inter_height+2}
   
   
   
@@ -191,7 +220,6 @@ float KalMan(Kal_Struct *kal,float x){
 float Window_Filter(Window_Filter_Struct * wfs,float data){
   int j;
   float sum=0;
-  int count;
   
   if(!wfs->Window_Buffer)
     return 0;
@@ -205,6 +233,8 @@ float Window_Filter(Window_Filter_Struct * wfs,float data){
   }
   return sum/wfs->max;
 }
+
+
 /*
 	控制是否发送波形的命令
 */
@@ -248,8 +278,8 @@ void write_prams(int arg_num,char ** s,float * args){
 		HAL_FLASH_Lock();
 		return ;
   }
-	
-	for(i=0;i<PRAM_NUM;++i){
+  int pram_num=sizeof(Pram_Array)/sizeof(pram_node);
+	for(i=0;i<pram_num;++i){
 		temp=*((uint32_t *)(Pram_Array[i].pram_data));
 		HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD,FLASH_Start+i*4,temp);
 		uprintf("write Pram[%d]  %s Ok!\r\n",i,Pram_Array[i].pram_string);
@@ -264,8 +294,8 @@ void load_prams(int arg_num,char ** s,float * args){
 		uprintf("error arg_num!\r\n");
 		return ;
 	}
-	
-	for(i=0;i<PRAM_NUM;++i){
+	int pram_num=sizeof(Pram_Array)/sizeof(pram_node);
+	for(i=0;i<pram_num;++i){
         memcpy(Pram_Array[i].pram_data,(void *)(FLASH_Start+i*4),Pram_Array[i].size);
 		uprintf("Load Pram %dth %s:f:%f  d:%d\r\n",i,Pram_Array[i].pram_string,\
                                               *(float *)(Pram_Array[i].pram_data),\
@@ -275,4 +305,156 @@ void load_prams(int arg_num,char ** s,float * args){
         debug_wave[i]=Wave_Array[*(char *)(Pram_Array[i].pram_data)].wave_ptr;           
 	}
 	
+}
+
+unsigned char Analize_GPS(char * raw_data,GPRMC * r){
+    int i=0;
+    char *ptr=0;
+    for(ptr=strtok(raw_data,","),i=1;ptr!=0;ptr=strtok(0,","),++i){
+        switch(i){
+        case 2:
+            r->UTC_TIME=atof(ptr);
+            break;
+        case 4:
+            r->Lat=atof(ptr);
+            break;
+        case 5:
+            if(*ptr=='N'){
+                r->Lat*=1;
+            }else{
+                r->Lat*=-1;
+            }
+            break;
+        case 6:
+            r->Long=atof(ptr);
+            break;
+        case 7:
+            if(*ptr=='E'){
+                r->Long*=1;
+            }else{
+                r->Long*=-1;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    if(i<7){
+        return 0;
+    }else{
+        return 1;
+    }
+}
+
+
+
+void HB_Push(History_Buffer * hb,float data){
+  if(hb->i==hb->max){    //已至末尾
+    hb->i=0;              //移到数组头
+    if(!hb->is_full){
+      hb->is_full=1;
+    }
+  }
+  hb->buffer[hb->i]=data;
+  hb->i++;
+}
+
+void HB_Clear(History_Buffer * hb){
+  hb->i=0;
+}
+
+int HB_Now(History_Buffer *hb){
+  return hb->i;
+}
+
+float HB_Get(History_Buffer * hb,int index){
+  if(index<0){
+    if(hb->is_full){
+      index+=hb->max;
+    }else{
+      index=0;
+    }
+  }
+  return hb->buffer[index];
+}
+/*************************************************
+
+函数名: LPButterworth(float curr_input,Butter_BufferData *Buffer,Butter_Parameter *Parameter)
+
+说明: 二阶巴特沃斯数字低通滤波器
+
+入口: float curr_input 当前输入
+
+出口: 滤波器输出值
+
+备注: 2阶Butterworth低通滤波器
+
+*************************************************/
+
+float LPButterworth(float curr_input,Butter_BufferData *Buffer,Butter_Parameter *Parameter)
+{
+
+  static int LPB_Cnt=0;
+  
+  /* 加速度计Butterworth滤波 */
+  
+  /* 获取最新x(n) */
+  
+  Buffer->Input_Butter[2]=curr_input;
+  
+  if(LPB_Cnt>=500)
+    
+  {
+    
+    /* Butterworth滤波 */
+    
+    Buffer->Output_Butter[2]=
+      
+      Parameter->b[0] * Buffer->Input_Butter[2]
+        
+        +Parameter->b[1] * Buffer->Input_Butter[1]
+          
+          +Parameter->b[2] * Buffer->Input_Butter[0]
+            
+            -Parameter->a[1] * Buffer->Output_Butter[1]
+              
+              -Parameter->a[2] * Buffer->Output_Butter[0];
+    
+  }
+  
+  else
+    
+  {
+    
+    Buffer->Output_Butter[2]=Buffer->Input_Butter[2];
+    
+    LPB_Cnt++;
+    
+  }
+  
+  /* x(n) 序列保存 */
+  
+  Buffer->Input_Butter[0]=Buffer->Input_Butter[1];
+  
+  Buffer->Input_Butter[1]=Buffer->Input_Butter[2];
+  
+  /* y(n) 序列保存 */
+  
+  Buffer->Output_Butter[0]=Buffer->Output_Butter[1];
+  
+  Buffer->Output_Butter[1]=Buffer->Output_Butter[2];
+  
+  return (Buffer->Output_Butter[2]);
+
+}
+
+void get_info(int arg_num,char **s,float *args){
+  if(arg_num>0){
+    uprintf("error arg_num!\r\n");
+    return ;
+  }
+  int num=sizeof(Wave_Array)/sizeof(wave_node);
+  for(int i=0;i<num;++i){
+    uprintf("%s:  %f\r\n",Wave_Array[i].wave_string,*Wave_Array[i].wave_ptr);
+  }
 }

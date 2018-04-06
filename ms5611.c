@@ -144,6 +144,15 @@ Kal_Struct kal_height={1,0,0.01,0.15,0,1};
 extern void Get_Height(float *vz,float refer_height,int call_time,float *height);
 extern float Velocity[3];
 extern float Height;
+extern History_Buffer Height_HB;
+extern void Height_Control();
+
+Butter_Parameter MS_Butter_Pram={\
+  {1,-1.6474599810769768, 0.7008967811884026},\
+    {0.013359200027856505,0.02671840005571301 ,0.013359200027856505}};
+
+Butter_BufferData MS_Butter_Data;
+  
 void MS5611_Read(MS5611_Dev *dev){
   int32_t pressure,temperature;
   
@@ -160,21 +169,19 @@ void MS5611_Read(MS5611_Dev *dev){
   }
   
   switch(dev->step){
-  case 1:
-    ms5611_start_up(dev); 
+  case 1: 
+    ms5611_ut=ms5611_read_adc(dev);
+    ms5611_calculate(&pressure,&temperature);
+
+    MS5611_Height=(101325-pressure)*10.0f;
+    //MS5611_Height=LPButterworth(MS5611_Height,&MS_Butter_Data,&MS_Butter_Pram);
+    Height_Control();
+    ms5611_start_up(dev);
     break;
   case 2:
     ms5611_up=ms5611_read_adc(dev);
     ms5611_start_ut(dev);    
-    break;
-  case 3:
-    ms5611_ut=ms5611_read_adc(dev);
-    ms5611_calculate(&pressure,&temperature);
     dev->step=0;
-    MS5611_Height=(101325-pressure)*10.0f;
-    Get_Height(&Velocity[2],MS5611_Height,30,&Height);
-    //MS5611_Height=KalMan(&kal_height,(101325-pressure)*10); //单位cm
-    //uprintf("%d\r\n",pressure);
     break;
   }
 }

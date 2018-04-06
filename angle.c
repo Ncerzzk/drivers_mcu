@@ -14,6 +14,7 @@ extern UART_HandleTypeDef huart2;
 extern TIM_HandleTypeDef htim7;
 
 extern MPU_Dev MPU9250;
+
 float Angle_Speed[3];
 float Accel[3];
 float Accel_WFS[3];
@@ -25,12 +26,6 @@ float Height;
 int16_t Gyro_Offset[3];
 
 float gravity_X,gravity_Y,gravity_Z; //重力加速度分量
-
-float v_x,v_y,v_z;    //三个轴上的速度
-
-float a_x,a_y,a_z;    //三个轴上的加速度（去除重力加速度分量）
-
-float s_x,s_y,s_z;		//三个轴的距离
 
 float q0=1.0f;
 float q1=0.0f;
@@ -60,19 +55,21 @@ float Get_Scale_Data(float raw_data,float offset,float scale){
 }
 
 void Scale_Mag(float *mag){
+  
   float mag_offset[3]={
-    -0.98067624060245,
-    0.699519190197516,
-   -0.0901617905243115
+    -1.10733816275476,
+    1.68293111911182,
+   -1.47880622640983
   };
   float B[6]={
-    1.02144401181779,
-    0.000541435867779272,
-    -0.00396394687224986,
-    1.01231799945786,
-    -0.00576948832812266,
-    0.967142037621097
+    1.06467231442859,
+    -0.000170726411333116,
+    0.0286170458742405,
+    1.0056622056883,
+    0.0129797749003217,
+    0.934904674137626
   };
+
   float temp[3];
   int i;
   for(i=0;i<3;++i){
@@ -130,7 +127,7 @@ void adjust_accel_mag(int arg_num,char **s,float * arg){
 void adjust_gyro(int arg_num,char **s,float * arg){
   int i;
   int16_t ac[3],gy[3];
-  int32_t gy_sum[3];
+  int32_t gy_sum[3]={0};
   
   HAL_NVIC_DisableIRQ(TIM7_IRQn);
   uprintf("start to adjust gyro!\r\n");
@@ -150,15 +147,29 @@ void adjust_gyro(int arg_num,char **s,float * arg){
   
 }
 
+extern void Fly_Init();
 
-void Free_Falling_Detect(float * accel){
-  int i;
-  float sum=0;
-  for(i=0;i<3;++i){
-    sum+=accel[i]*accel[i];
-  }
-  if(sum<0.5f){
-    uprintf("Free falling now!\r\n");
+struct{
+  int Falling_Time;
+  uint8_t Fall_Detect_Mode;
+  uint16_t Start_Time;
+  uint8_t  Falling;
+}Falling_Detect={0,0,5000,0};
+
+/*
+  Call_time 该函数的调用周期，单位：ms
+*/
+extern uint32_t uwTick;
+void Free_Falling_Detect(float * accel,int call_time){
+  
+  if(accel[2]<0.1f&&uwTick>Falling_Detect.Start_Time){
+    Falling_Detect.Falling_Time+=call_time;
+    if(Falling_Detect.Falling_Time>300){
+      Fly_Init();
+      Falling_Detect.Falling_Time=0;
+    }
+  }else{
+    Falling_Detect.Falling_Time=0;
   }
 }
 
@@ -255,10 +266,7 @@ void IMU_Update(float * ac,float * gy,float *attitude,float *ace){
     attitude[2]= atan2(2*q1q2 + 2*q0q3, -2*q2q2 - 2*q3q3+1)* 57.3f;         //yaw
 }
  
-
-
-
-void AHR_Update(float * ac,float * gy,float * mag,float * attitude,float *ace){
+void AHR_Update(float * ac,float * gy,float * mag,float * attitude,float *ace,uint8_t use_mag){
     float ax,ay,az,wx,wy,wz,mx,my,mz;
 	float norm;
 	float gbx,gby,gbz;
@@ -333,10 +341,16 @@ void AHR_Update(float * ac,float * gy,float * mag,float * attitude,float *ace){
 	
 	//与实际加速度计测得的ax,ay,az做叉积，取误差
 	//为什么（单位向量）叉积可以作为误差，因为A x B =|A|*|B|*sinSeita=sinSeita, sinSeita约等于Seita
-	ex = (ay*gbz - az*gby)+(my*mbz - mz*mby);                                                            
-	ey = (az*gbx - ax*gbz)+(mz*mbx - mx*mbz);
-	ez = (ax*gby - ay*gbx)+(mx*mby - my*mbx);
-	
+	if(use_mag){
+      ex = (ay*gbz - az*gby)+(my*mbz - mz*mby);                                                            
+      ey = (az*gbx - ax*gbz)+(mz*mbx - mx*mbz);
+      ez = (ax*gby - ay*gbx)+(mx*mby - my*mbx);
+	}else{
+      //此时，AHR算法退化为IMU算法
+      ex = (ay*gbz - az*gby);                                                        
+      ey = (az*gbx - ax*gbz);
+      ez = (ax*gby - ay*gbx);      
+    }
 	
     exInt += ex*IMU_I*INTEGRAL_CONSTANT;
     eyInt += ey*IMU_I*INTEGRAL_CONSTANT;
@@ -380,7 +394,7 @@ void Get_Velocity(float * ace,float *v,int call_time,float ace_sub){
   for(i=0;i<2;++i){
     v[i]+=ace[i]*980*call_time/1000;   //*9.8m/s^2
   }
-  v[2]+=(ace[2]-1)*980*call_time/1000+ace_sub*0.005;  //对Z轴特殊处理，因为有重力加速度的影响
+  v[2]+=(ace[2]-1)*980*call_time/1000+ace_sub*0.0025;  //对Z轴特殊处理，因为有重力加速度的影响
 }
 
 /*
@@ -389,10 +403,127 @@ call_time 积分时间，单位ms
 refer_height 参考高度，一般为气压计得到的高度
 vz Z轴速度
 */
-void Get_Height(float *vz,float refer_height,int call_time,float *height){
+void  Get_Height(float *vz,float refer_height,int call_time,float *height){
   float sub;
   sub=refer_height-*height; //一阶互补滤波的补偿项，补偿在速度上
-  *height+=(*vz)*call_time/1000+sub*0.06;
+  *height+=(*vz)*call_time/1000+sub*0.02;
   ace_sub=sub;
 
+}
+
+
+/*
+  惯性导航拟合函数
+  call_time:调用周期 单位：ms   即惯性导航融合周期
+*/
+/*
+#define K_TIME_CONSTANT  1.0f
+float Numer_K_A_H=2.0f;
+float Numer_K_V_H=7.0f;
+float Numer_K_S_H=3.0f;
+#define K_A_H   (Numer_K_A_H/(K_TIME_CONSTANT*K_TIME_CONSTANT*K_TIME_CONSTANT))
+#define K_V_H   (Numer_K_V_H/(K_TIME_CONSTANT*K_TIME_CONSTANT))
+#define K_S_H   (Numer_K_S_H/K_TIME_CONSTANT)
+*/
+
+#define K_TIME_CONSTANT  1.0f
+float Numer_K_A_H=1.0f;
+float Numer_K_V_H=5.0f;
+float Numer_K_S_H=5.0f;
+#define K_A_H   (Numer_K_A_H/(K_TIME_CONSTANT*K_TIME_CONSTANT*K_TIME_CONSTANT))
+#define K_V_H   (Numer_K_V_H/(K_TIME_CONSTANT*K_TIME_CONSTANT))
+#define K_S_H   (Numer_K_S_H/K_TIME_CONSTANT)
+
+float ACE_Z_Offset=0.968;               //重力常量
+typedef struct{
+  float x;
+  float y;
+  float z;
+}Position;
+
+void set_k_h(int arg_num,char **s,float *args){
+  if(arg_num!=0x0101){
+    uprintf("error arg_num!\r\n");
+    return ;
+  }
+  if(args[0]<0){
+    uprintf("error K!\r\n");
+    return ;
+  }
+  if(compare_string("a",s[0])){
+    Numer_K_A_H=args[0];
+  }else if(compare_string("v",s[0])){
+    Numer_K_V_H=args[0];
+  }else if(compare_string("s",s[0])){
+    Numer_K_S_H=args[0];
+  }
+  uprintf("OK,set %s = %f\r\n",s[0],args[0]);
+}
+Position Quad_Position;
+float Height_History_Buffer[20];
+History_Buffer Height_HB={Height_History_Buffer,0,20,0};
+float a_correct[3];
+float v_correct[3],s_correct[3];
+float inter_height[3];
+float inter_v[3];
+void Get_Position(float * ace,float *v,int call_time,float refer_height,float * Height){
+  float height_sub=0;
+  float a[3];
+
+  float v_dealt[3];
+  
+  float dt=call_time/1000.0f;
+  
+  //height_sub=refer_height-*Height;
+  
+  if(!Height_HB.is_full){
+    height_sub=refer_height-*Height;
+  }else{
+    height_sub=refer_height-HB_Get(&Height_HB,Height_HB.i-11);
+  }
+  
+  HB_Push(&Height_HB,*Height);
+ 
+  a_correct[2]+=height_sub*K_A_H*dt;           //a的微分
+  v_correct[2]+=height_sub*K_V_H*dt;            //v的微分
+  s_correct[2]+=height_sub*K_S_H*dt;            //s的微分
+  
+  a[2]=(ace[2]-ACE_Z_Offset)*980.0f+a_correct[2];   //zheli youwenti 
+  
+  v_dealt[2]=a[2]*dt;                           // dv=a*dt
+  
+
+  inter_height[2]+=(v[2]+0.5*v_dealt[2])*dt;        //intergral(v+dv)*d
+  *Height=inter_height[2]+s_correct[2];
+  
+  inter_v[2]+=v_dealt[2];
+  
+  v[2]=inter_v[2]+v_correct[2];
+  
+  //v[2]+=a[2]*call_time/1000.0f+v_correct[2];
+  
+  //*Height+=v[2]*call_time/1000.0f+s_correct[2];
+}
+
+uint8_t ACE_Offset_Flag=0;
+
+/*
+  由于该函数要获取ACE的值，而ACE在2ms定时中断中解算，因此将此函书放在while中。
+*/
+void Get_Ace_Offset(){
+  int cnt=0;
+  float sum;
+  if(!ACE_Offset_Flag){
+    return ;
+  }
+  uprintf("OK,start to adjust ace_offset!\r\n");
+  for(cnt=0;cnt<500;++cnt){
+    sum+=Accel_E[2];
+    HAL_Delay(3);
+  }
+  sum/=500;
+  ACE_Z_Offset=sum;
+  uprintf("adjust ace_offset ok!\r\n");
+  uprintf("ace_offset:%f\r\n",sum);
+  ACE_Offset_Flag=0;
 }
