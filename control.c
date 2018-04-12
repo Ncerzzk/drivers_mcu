@@ -35,11 +35,8 @@ float Correct;
 
 float Accel_Speed_Z_Out=0; //加速度环 高度环的内环
 
-extern float Angle[3];
-extern float Angle_Speed[3];
+
 extern float MS5611_Height;
-extern float Velocity[3];
-extern float Height;
 
 float base_duty=0; //50
 float CHn_Out[4];
@@ -47,8 +44,8 @@ float CHn_Out[4];
 //PID 结构体参数
 //带Single是单级PID
 
-PID_S ROLL_PID={0.2,0,0,0,0,2};    //{0.1,0,0,0,0,2}
-PID_S PITCH_PID={0.2,0,0,0,0,2}; //{0.1,0,0,0,0,2}
+PID_S ROLL_PID={0.25,0.3,0,0,0,2};    //{0.1,0,0,0,0,2}
+PID_S PITCH_PID={0.25,0.3,0,0,0,2}; //{0.1,0,0,0,0,2}
 PID_S YAW_PID={-0.1,0,0,0,0,2};
 	
 PID_S ANGLE_SPEED_Y_PID={-30,-100,-1,0,0,20};  //{-30,-100,-1,0,0,20   旧飞机
@@ -86,7 +83,7 @@ void Fly_Init(void){      //解锁飞行，初始化高度、yaw
     
     Height_PID.i=0;
     Velocity_Z_PID.i=0;
-    yaw_target=Angle[YAW];
+    yaw_target=Flight_Attitude.Angle[YAW];
     
     
     //height_offset=Height;         //电机旋转后的气压计会突变，不可在此时初始化高度
@@ -209,10 +206,10 @@ void Fly_Control(){
   }
   
   if(Is_Flying()){
-    Yaw_Out=PID_Control(&YAW_PID,0,get_yaw_err(Angle[Z],yaw_target));
+    Yaw_Out=PID_Control(&YAW_PID,0,get_yaw_err(Flight_Attitude.Angle[Z],yaw_target));
     Limit(Yaw_Out,10);
     if(Angle_Speed_Z_Flag)
-      Angle_Speed_Z_Out=PID_Control(&ANGLE_SPEED_Z_PID,Yaw_Out,Angle_Speed[Z]);
+      Angle_Speed_Z_Out=PID_Control(&ANGLE_SPEED_Z_PID,Yaw_Out,Flight_Attitude.Angle_Speed[Z]);
     else
       Angle_Speed_Z_Out=0;
   }
@@ -220,9 +217,9 @@ void Fly_Control(){
   //Limit(Angle_Speed_Z_Out,15);
   
   if(Roll_Pitch_Flag){ //外环开启
-    Roll_Out=PID_Control(&ROLL_PID,roll_target+balance_roll,Angle[ROLL]);     //如果是调角速度内环，注释掉这句
+    Roll_Out=PID_Control(&ROLL_PID,roll_target+balance_roll,Flight_Attitude.Angle[ROLL]);     //如果是调角速度内环，注释掉这句
     Limit(Roll_Out,10);
-    Pitch_Out=PID_Control(&PITCH_PID,pitch_target+balance_pitch,Angle[PITCH]);  //如果是调角速度内环，注释掉这句
+    Pitch_Out=PID_Control(&PITCH_PID,pitch_target+balance_pitch,Flight_Attitude.Angle[PITCH]);  //如果是调角速度内环，注释掉这句
     Limit(Pitch_Out,10);
   }else{//外环关闭
     Roll_Out=0;
@@ -240,8 +237,8 @@ void Fly_Control(){
   Correct=Velocity_Z_Out;
   Limit(Correct,50); 
   
-  Angle_Speed_X_Out=PID_Control(&ANGLE_SPEED_X_PID,Roll_Out,Angle_Speed[X]);
-  Angle_Speed_Y_Out=PID_Control(&ANGLE_SPEED_Y_PID,Pitch_Out,Angle_Speed[Y]);
+  Angle_Speed_X_Out=PID_Control(&ANGLE_SPEED_X_PID,Roll_Out,Flight_Attitude.Angle_Speed[X]);
+  Angle_Speed_Y_Out=PID_Control(&ANGLE_SPEED_Y_PID,Pitch_Out,Flight_Attitude.Angle_Speed[Y]);
   
   //串级PID
   CHn_Out[0]=Angle_Speed_X_Out-Angle_Speed_Y_Out+Angle_Speed_Z_Out+base_duty+Correct;  //以角度向前倾，向左倾为标准
@@ -266,14 +263,14 @@ void Height_Control(){
   if(Height_Open_Flag){
     height_cnt++;
     if(height_cnt==5){
-      height_out=PID_Control(&Height_PID,height_target+height_offset,Height);
+      height_out=PID_Control(&Height_PID,height_target+height_offset,Flight_Position.height);
       height_cnt=0;
     }
     
     Velocity_Z_Out_Old=Velocity_Z_Out;
     
     //Height_Out=PID_Control(&Height_PID,height_target+height_offset,Height);
-    Velocity_Z_Out=PID_Control(&Velocity_Z_PID,height_out,Velocity[2]);
+    Velocity_Z_Out=PID_Control(&Velocity_Z_PID,height_out,Flight_Attitude.Velocity[2]);
   }else{
     Velocity_Z_Out=0;
     Velocity_Z_Out_Old=0;

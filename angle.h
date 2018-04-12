@@ -9,20 +9,33 @@
 
 #define BLE_CONTROL	1
 
+typedef struct{
+  float Angle[3];
+  float Angle_Speed[3];
+  float Accel[3];
+  float Accel_E[3];
+  float Mag[3];
+  float Velocity[3];
+  float Height;
+}Attitude;
+
+typedef struct{
+  GPRMC gps;
+  float height;
+  float x;
+  float y;
+}Position;
+
+extern Attitude Flight_Attitude;
+extern Position Flight_Position;
+
 extern int16_t Gyro_Offset[3];
 
-extern float Angle_Speed[3];
-extern float Accel[3];
-extern float Accel_WFS[3];
-extern float Angle[3];
-extern float Mag[3];
-extern float Accel_E[3]; //天地坐标系下的加速度
-extern float Velocity[3];
-extern float Height;
-extern int16_t Gyro_Offset[3];
 
-extern float gravity_X,gravity_Y,gravity_Z; //重力加速度分量
+extern float gravity_X,gravity_Y,gravity_Z; //閲嶅姏鍔犻�熷害鍒嗛噺
 extern uint8_t ACE_Offset_Flag;
+
+
 
 typedef enum{
 	left,
@@ -55,8 +68,18 @@ void Free_Falling_Detect(float * accel,int call_time);
 
 void Get_Velocity(float * ace,float *v,int call_time,float ace_sub);
 void Get_Height(float *vz,float refer_height,int call_time,float *height);
-void Get_Position(float * ace,float *v,int call_time,float refer_height,float * Height);
+void Get_Position(Attitude * attitude,int call_time,float refer_height,GPRMC *refer_gps,Position *position);
 void Get_Ace_Offset();
 void Wait_Height_Init();
+
+void Get_Attitude(Attitude * a);
+
+typedef struct{
+  int16_t Gyro_Offset[3];
+  float Acc_Offset[3];
+  float Acc_Scale[3];
+}__Calibration;
+
+extern __Calibration Calibration;
 #endif
 

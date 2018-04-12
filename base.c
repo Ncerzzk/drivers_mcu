@@ -42,9 +42,9 @@ pram_node Pram_Array[]={
   {"wave4",Wave_Set+3,sizeof(Wave_Set[0])},
   {"wave_g",&wave_gain,sizeof(wave_gain)},
   
-  {"gyro_offset_x",Gyro_Offset+0,sizeof(Gyro_Offset[0])},
-  {"gyro_offset_y",Gyro_Offset+1,sizeof(Gyro_Offset[0])},
-  {"gyro_offset_z",Gyro_Offset+2,sizeof(Gyro_Offset[0])},
+  {"gyro_offset_x",Calibration.Gyro_Offset+0,sizeof(Calibration.Gyro_Offset[0])},
+  {"gyro_offset_y",Calibration.Gyro_Offset+1,sizeof(Calibration.Gyro_Offset[0])},
+  {"gyro_offset_z",Calibration.Gyro_Offset+2,sizeof(Calibration.Gyro_Offset[0])},
   
   {"NRF_USE",&NRF_Flag,sizeof(NRF_Flag)},
   
@@ -64,18 +64,18 @@ extern float a_correct[3];
 extern float v_correct[3],s_correct[3];
 extern float inter_height[3];
 extern float inter_v[3];
-wave_node Wave_Array[WAVE_TYPE_NUM]={
-  {"wx",Angle_Speed+0},
-  {"wy",Angle_Speed+1},
-  {"wz",Angle_Speed+2},
+wave_node Wave_Array[]={
+  {"wx",Flight_Attitude.Angle_Speed+0},
+  {"wy",Flight_Attitude.Angle_Speed+1},
+  {"wz",Flight_Attitude.Angle_Speed+2},
   
-  {"pitch",Angle+0},
-  {"roll",Angle+1},
-  {"yaw",Angle+2},
+  {"pitch",Flight_Attitude.Angle+0},
+  {"roll",Flight_Attitude.Angle+1},
+  {"yaw",Flight_Attitude.Angle+2},
   
-  {"ax",Accel+0},
-  {"ay",Accel+1},
-  {"az",Accel+2},
+  {"ax",Flight_Attitude.Accel+0},
+  {"ay",Flight_Attitude.Accel+1},
+  {"az",Flight_Attitude.Accel+2},
   
   {"c1",CHn_Out+0},
   {"c2",CHn_Out+1},
@@ -84,36 +84,26 @@ wave_node Wave_Array[WAVE_TYPE_NUM]={
   
   {"ms_height",&MS5611_Height},
   
-  {"axe",Accel_E+0},
-  {"aye",Accel_E+1},
-  {"aze",Accel_E+2},
+  {"axe",Flight_Attitude.Accel_E+0},
+  {"aye",Flight_Attitude.Accel_E+1},
+  {"aze",Flight_Attitude.Accel_E+2},
   
-  {"height",&Height},
+  {"height",&Flight_Position.height},
   
-  {"vx",Velocity+0},
-  {"vy",Velocity+1},
-  {"vz",Velocity+2},
+  {"vx",Flight_Attitude.Velocity+0},
+  {"vy",Flight_Attitude.Velocity+1},
+  {"vz",Flight_Attitude.Velocity+2},
   
   {"axw",Accel_WFS+0},
   {"ayw",Accel_WFS+1},
   {"azw",Accel_WFS+2},
   
-  {"mx",Mag+0},
-  {"my",Mag+1},
-  {"mz",Mag+2},
+  {"mx",Flight_Attitude.Mag+0},
+  {"my",Flight_Attitude.Mag+1},
+  {"mz",Flight_Attitude.Mag+2},
   
-  {"hoffset",&height_offset},
-  
-  {"acorrect",a_correct+2},
-  {"vcorrect",v_correct+2},
-  {"scorrect",s_correct+2},
-  
-  {"interv",inter_v+2},
-  {"inters",inter_height+2},
-  
-  {"r_height",&Relative_Height}
-  
-  
+  {"hoffset",&height_offset}
+
   
 };
 
@@ -157,7 +147,8 @@ void set_debug_wave(int arg_num,char ** string_prams,float * float_prams){
 		return ;
 	}
     
-    for(i=0;i<WAVE_TYPE_NUM;++i){
+    int length=sizeof(Wave_Array)/sizeof(wave_node);
+    for(i=0;i<length;++i){
       if(compare_string(Wave_Array[i].wave_string,string)){
         if(arg_num!=0x0100){    //仅提供通道，不提供波形设置，则不修改，只显示当前通道的波形
           debug_wave[index]=Wave_Array[i].wave_ptr;   //修改当前wave输出的指针

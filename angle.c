@@ -4,6 +4,8 @@
 #include "base.h"
 #include "control.h"
 #include "ms5611.h"
+#include "mpu9250.h"
+
 
 
 #define INTEGRAL_CONSTANT 0.002f		//积分时间 2ms
@@ -14,20 +16,18 @@
 extern UART_HandleTypeDef huart2;
 extern TIM_HandleTypeDef htim7;
 
-extern MPU_Dev MPU9250;
-
+Attitude Flight_Attitude;
+Position Flight_Position;
+/*
 float Angle_Speed[3];
 float Accel[3];
-float Accel_WFS[3];
 float Angle[3];
-float Mag[3];
 float Accel_E[3]; //天地坐标系下的加速度
-float Velocity[3];
-float Height;
-float Relative_Height;
-int16_t Gyro_Offset[3];
+*/
 
-float gravity_X,gravity_Y,gravity_Z; //重力加速度分量
+float Relative_Height;
+float Accel_WFS[3];
+
 
 float q0=1.0f;
 float q1=0.0f;
@@ -39,9 +39,16 @@ float exInt,eyInt,ezInt;
 float IMU_P=1.0f;				//2.0f   //20
 float IMU_I=0.005f;		//0.005          0.03
 
+__Calibration Calibration={{0,0,0},\
+  {-0.0200311354256406f,-0.000421249210775063f,0.0411504643712059f},\
+  {1.01977103002458f,1.011318642755862f,0.969637306791105f}};                   //acc_scale
 
-
-
+  /*
+  
+    a->Accel[0]=Get_Scale_Data(accel_temp[0],-0.0200311354256406f,1.01977103002458f);
+  a->Accel[1]=Get_Scale_Data(accel_temp[1],-0.000421249210775063f,1.011318642755862f);
+  a->Accel[2]=Get_Scale_Data(accel_temp[2],0.0411504643712059f,0.969637306791105f); 
+*/
 /*
   对数据进行零偏校准
 */
@@ -138,11 +145,11 @@ void adjust_gyro(int arg_num,char **s,float * arg){
     gy_sum[0]+=gy[0];
     gy_sum[1]+=gy[1];
     gy_sum[2]+=gy[2];
-    HAL_Delay(1);
+    HAL_Delay(2);
   }
   for(i=0;i<3;++i){
-    Gyro_Offset[i]=gy_sum[i]/200; 
-    uprintf("Gyro offset[%d]=%d\r\n",i,Gyro_Offset[i]);
+    Calibration.Gyro_Offset[i]=gy_sum[i]/200; 
+    uprintf("Gyro offset[%d]=%d\r\n",i,Calibration.Gyro_Offset[i]);
   }
   HAL_NVIC_EnableIRQ(TIM7_IRQn);
   uprintf("adjust gyro succesful!\r\n");
@@ -388,33 +395,37 @@ void AHR_Update(float * ac,float * gy,float * mag,float * attitude,float *ace,ui
     
 }
 
-/*
-call_time：积分时间，单位ms
-v ：全局变量数组，储存三轴速度
-*/
-
-float ace_sub=0;  //二阶互补滤波的补偿项，补偿在加速度上。
-
-void Get_Velocity(float * ace,float *v,int call_time,float ace_sub){
-  int i=0;
-  for(i=0;i<2;++i){
-    v[i]+=ace[i]*980*call_time/1000;   //*9.8m/s^2
+static void Read_Senor(Attitude * a){
+  static int call_time=0;//2ms调用一次
+  
+  int16_t mag[3],ac[3],gy[3];
+  
+  float accel_temp[3];
+  
+  call_time++;
+  if(call_time>5){
+    MPU_ReadM_Mag(&MPU9250,mag);
+    for(int i=0;i<3;++i){
+      a->Mag[i]=mag[i]*0.15f/100.0f;
+    }
+    Scale_Mag(a->Mag);
+    call_time=0;
   }
-  v[2]+=(ace[2]-1)*980*call_time/1000+ace_sub*0.0025;  //对Z轴特殊处理，因为有重力加速度的影响
+  
+  MPU_Read6500(&MPU9250,ac,gy);
+  for(int i=0;i<3;++i){
+    accel_temp[i]=Get_Attitude_Data(ac[i],MPU9250.setting->accel_range,0);
+    a->Angle_Speed[i]=Get_Attitude_Data(gy[i],MPU9250.setting->gyro_range,Calibration.Gyro_Offset[i]);
+  }
+  
+  a->Accel[0]=Get_Scale_Data(accel_temp[0],Calibration.Acc_Offset[0],Calibration.Acc_Scale[0]);
+  a->Accel[1]=Get_Scale_Data(accel_temp[1],Calibration.Acc_Offset[1],Calibration.Acc_Scale[1]);
+  a->Accel[2]=Get_Scale_Data(accel_temp[2],Calibration.Acc_Offset[2],Calibration.Acc_Scale[2]);  
 }
 
-/*
-height 必须指向一个全局变量
-call_time 积分时间，单位ms
-refer_height 参考高度，一般为气压计得到的高度
-vz Z轴速度
-*/
-void  Get_Height(float *vz,float refer_height,int call_time,float *height){
-  float sub;
-  sub=refer_height-*height; //一阶互补滤波的补偿项，补偿在速度上
-  *height+=(*vz)*call_time/1000+sub*0.02;
-  ace_sub=sub;
-
+void Get_Attitude(Attitude * a){
+  Read_Senor(a);
+  AHR_Update(a->Accel,a->Angle_Speed,a->Mag,a->Angle,a->Accel_E,!Is_Flying());
 }
 
 
@@ -440,12 +451,11 @@ float Numer_K_S_H=5.0f;
 #define K_V_H   (Numer_K_V_H/(K_TIME_CONSTANT*K_TIME_CONSTANT))
 #define K_S_H   (Numer_K_S_H/K_TIME_CONSTANT)
 
+#define K_A_XY  1.0f/(K_TIME_CONSTANT*K_TIME_CONSTANT*K_TIME_CONSTANT)
+#define K_V_XY  5.0f/(K_TIME_CONSTANT*K_TIME_CONSTANT)
+#define K_S_XY  5.0f/(K_TIME_CONSTANT)
+
 float ACE_Z_Offset=0.968;               //重力常量
-typedef struct{
-  float x;
-  float y;
-  float z;
-}Position;
 
 void set_k_h(int arg_num,char **s,float *args){
   if(arg_num!=0x0101){
@@ -468,49 +478,89 @@ void set_k_h(int arg_num,char **s,float *args){
 Position Quad_Position;
 float Height_History_Buffer[20];
 History_Buffer Height_HB={Height_History_Buffer,0,20,0};
-float a_correct[3];
-float v_correct[3],s_correct[3];
-float inter_height[3];
-float inter_v[3];
 
 
 
-void Get_Position(float * ace,float *v,int call_time,float refer_height,float * Height){
-  float height_sub=0;
-  float a[3];
-
-  float v_dealt[3];
+void Get_Position(Attitude * attitude,int call_time,float refer_height,GPRMC *refer_gps,Position *position){
+  static float inter_Position[3];
+  static float inter_v[3];
+  static float a_correct[3];
+  static float v_correct[3],s_correct[3];  
   
+  float height_sub=0;
+  float x_sub=0;
+  float y_sub=0;
+  
+  float a[3];
+  float v_dealt[3];
   float dt=call_time/1000.0f;
+
+  
+  //往前是Y负方向（加速度计）
+  //往左是X正方向
+  
+  //假设飞机往前对着正北
   
   //height_sub=refer_height-*Height;
+  if(position->gps.State==GPS_OK){
+    x_sub=(position->gps.Long-refer_gps->Long)*1; //这两个计算有问题
+    y_sub=(position->gps.Lat-refer_gps->Lat)*1;
+    
+    a_correct[0]+=x_sub*K_A_XY*dt;
+    v_correct[0]+=x_sub*K_V_XY*dt;
+    s_correct[0]+=x_sub*K_S_XY*dt;
+    
+    a_correct[1]+=y_sub*K_A_XY*dt;
+    v_correct[1]+=y_sub*K_V_XY*dt;
+    s_correct[1]+=y_sub*K_S_XY*dt;
+    
+    a[0]=attitude->Accel_E[0]+a_correct[0];
+    a[1]=attitude->Accel_E[1]+a_correct[1];
+    
+    v_dealt[0]=a[0]*dt;
+    v_dealt[1]=a[1]*dt;
+    
+    inter_Position[0]+=(attitude->Velocity[0]+0.5*v_dealt[0])*dt;
+    inter_Position[1]+=(attitude->Velocity[1]+0.5*v_dealt[1])*dt;
+    
+    position->x=inter_Position[0]+s_correct[0];
+    position->y=inter_Position[1]+s_correct[1];
+    
+    inter_v[0]+=v_dealt[0];
+    inter_v[1]+=v_dealt[1];
+    
+    attitude->Velocity[0]=inter_v[0]+v_correct[0];
+    attitude->Velocity[1]=inter_v[1]+v_correct[1];
+    
+    
+  }
   
   if(!Height_HB.is_full){
-    height_sub=refer_height-*Height;
+    height_sub=refer_height-position->height;
   }else{
     height_sub=refer_height-HB_Get(&Height_HB,Height_HB.i-11);
   }
   
-  HB_Push(&Height_HB,*Height);
+  HB_Push(&Height_HB,position->height);
  
   a_correct[2]+=height_sub*K_A_H*dt;           //a的微分
   v_correct[2]+=height_sub*K_V_H*dt;            //v的微分
   s_correct[2]+=height_sub*K_S_H*dt;            //s的微分
   
   
-  a[2]=(ace[2]-ACE_Z_Offset)*980.0f+a_correct[2];   //zheli youwenti 
+  a[2]=(attitude->Accel_E[2]-ACE_Z_Offset)*980.0f+a_correct[2];   //zheli youwenti 
   
   v_dealt[2]=a[2]*dt;                           // dv=a*dt
   
 
-  inter_height[2]+=(v[2]+0.5*v_dealt[2])*dt;        //intergral(v+dv)*d
-  *Height=inter_height[2]+s_correct[2];
+  inter_Position[2]+=(attitude->Velocity[2]+0.5*v_dealt[2])*dt;        //intergral(v+dv)*d
+  position->height=inter_Position[2]+s_correct[2];
   
   inter_v[2]+=v_dealt[2];
   
-  v[2]=inter_v[2]+v_correct[2];
+  attitude->Velocity[2]=inter_v[2]+v_correct[2];
   
-  Relative_Height=*Height-height_offset;
+  Relative_Height=position->height-height_offset;
   
   //v[2]+=a[2]*call_time/1000.0f+v_correct[2];
   
@@ -530,7 +580,7 @@ void Get_Ace_Offset(){
   }
   uprintf("OK,start to adjust ace_offset!\r\n");
   for(cnt=0;cnt<500;++cnt){
-    sum+=Accel_E[2];
+    sum+=Flight_Attitude.Accel_E[2];
     HAL_Delay(3);
   }
   sum/=500;
@@ -545,14 +595,14 @@ void Wait_Height_Init(){
   float sum;
   float temp;
   while(num<20){
-    temp=Velocity[2];
+    temp=Flight_Attitude.Velocity[2];
     if(temp<20&&temp>-20){
       num++;
     }
     HAL_Delay(10);
   }
   for(num=0;num<20;++num){
-    sum+=Height;
+    sum+=Flight_Position.height;
   }
   
   height_offset=sum/20;
