@@ -114,7 +114,8 @@ static void ms5611_calculate(int32_t *pressure, int32_t *temperature)
     int64_t off = ((int64_t)ms5611_c[2] << 16) + (((int64_t)ms5611_c[4] * dT) >> 7);
     int64_t sens = ((int64_t)ms5611_c[1] << 15) + (((int64_t)ms5611_c[3] * dT) >> 8);
     temp = 2000 + ((dT * (int64_t)ms5611_c[6]) >> 23);
-
+   
+    //temp = 3000;
     if (temp < 2000) { // temperature lower than 20degC
         delt = temp - 2000;
         delt = 5 * delt * delt;
@@ -147,15 +148,20 @@ extern float Height;
 extern History_Buffer Height_HB;
 extern void Height_Control();
 
+float MS5611_Height_Window[2];
+
+Window_Filter_Struct MS5611_Height_WFS={MS5611_Height_Window,2,0};
+
 Butter_Parameter MS_Butter_Pram={\
-  {1,-1.6474599810769768, 0.7008967811884026},\
-    {0.013359200027856505,0.02671840005571301 ,0.013359200027856505}};
+  {1,1.1429805025399007  ,  0.41280159809618855},\
+    {0.63894552515902237,1.2778910503180447 ,0.63894552515902237}};
 
 Butter_BufferData MS_Butter_Data;
   
 void MS5611_Read(MS5611_Dev *dev){
   int32_t pressure,temperature;
   
+#if MS5611OPEN==1
   if(dev->call_cycle>=dev->adc_time){
     dev->step++;
   }else{
@@ -172,8 +178,8 @@ void MS5611_Read(MS5611_Dev *dev){
   case 1: 
     ms5611_ut=ms5611_read_adc(dev);
     ms5611_calculate(&pressure,&temperature);
-
     MS5611_Height=(101325-pressure)*10.0f;
+    //MS5611_Height=Limit_Dealt_Filter((101325-pressure)*10.0f,&MS5611_Height_WFS,20);
     //MS5611_Height=LPButterworth(MS5611_Height,&MS_Butter_Data,&MS_Butter_Pram);
     Height_Control();
     ms5611_start_up(dev);
@@ -184,4 +190,17 @@ void MS5611_Read(MS5611_Dev *dev){
     dev->step=0;
     break;
   }
+#endif
+}
+
+void MS5611_test(){
+  MS5611_Dev*dev=&MS5611;
+  int32_t t,p;
+  ms5611_start_ut(dev); 
+  HAL_Delay(8);
+  ms5611_ut=ms5611_read_adc(dev);
+  ms5611_start_up(dev);
+  HAL_Delay(8);
+  ms5611_up=ms5611_read_adc(dev);
+  ms5611_calculate(&p,&t);
 }

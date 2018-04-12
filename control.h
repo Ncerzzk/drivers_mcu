@@ -53,6 +53,7 @@ extern char Motor_Open_Flag;
 extern char Height_Open_Flag;
 extern char NRF_Flag;
 extern float base_duty;
+extern float fly_duty;
 
 extern float balance_roll;   //平衡位置的角度
 extern float balance_pitch;  //平衡位置的角度

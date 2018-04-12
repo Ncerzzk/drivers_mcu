@@ -32,6 +32,8 @@ extern void set_target(int arg_num,char **s,float * args);
 extern void add_duty(int arg_num,char **s ,float *args);
 extern void get_info(int arg_num,char **s,float *args);
 extern void set_k_h(int arg_num,char **s,float *args);
+
+extern void set_fly_duty(int arg_num,char **s,float *args);
 extern char buffer_rx_temp;
 
 
@@ -61,6 +63,9 @@ void command_init(void){
     add_cmd("get_info",get_info);
     
     add_cmd("set_k",set_k_h);
+    
+    add_cmd("set_fly_duty",set_fly_duty);
+    
     
 }
 
@@ -135,7 +140,8 @@ static int16_t get_prams(char *s,char *** string_prams,float ** float_prams){
   *string_prams=string_buffer;
   
   i=0;
-  while(s[i]!='\0'&&num_float_i<=FLOAT_PRAM_NUM&&num_string_i<=STRING_PRAM_NUM&&num_i_i<10){
+  //使用DMA，增加s[1]!='\r'的条件，因为没有再把\r换成\0了
+  while(s[i]!='\0'&&s[i]!='\r'&&num_float_i<=FLOAT_PRAM_NUM&&num_string_i<=STRING_PRAM_NUM&&num_i_i<10){
     if(s[i]!=' '){//到达非空格
       if(in_flag==IN_SPACE){  //在数字中标志位和字符串标志位未设置,即从空格之后出现的第一个数字/字符
         if(isalpha(s[i])){
@@ -214,7 +220,7 @@ char compare_cmd(const char * cmd,char * s){
             return 0;
         ++i;
     }
-    if(s[i]!=' '&&s[i]!='\0'){
+    if(s[i]!=' '&&s[i]!='\0'&&s[i]!='\r'){          //使用DMA必须判断最后一个i套件
         return 0;   //比如命令hello 与命令 helloworld的情况，没有这个判断，会吧后者误认为前者
     }
     return i;
@@ -248,11 +254,11 @@ void analize(char * s){
               free(string_prams[temp]);
             }
             free(string_prams);
-            HAL_UART_Receive_IT(&huart6,&buffer_rx_temp,1);
+            //HAL_UART_Receive_IT(&huart6,&buffer_rx_temp,1);//
             return ;
         }
     }
-    HAL_UART_Receive_IT(&huart6,&buffer_rx_temp,1);
+    //HAL_UART_Receive_IT(&huart6,&buffer_rx_temp,1);//使用DMA，把该句注释
     uprintf("error command!\r\n");
 }
 

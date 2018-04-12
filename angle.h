@@ -44,6 +44,7 @@ void Get_Angle_Speed_Fast(void);
 extern float a_z_offset,a_x_offset,a_y_offset;
 extern float w_x_offset,w_y_offset,w_z_offset;
 extern float ACE_Z_Offset;
+extern float Relative_Height;
 
 float Get_Attitude_Data(int16_t raw_data,float range,int16_t offset);
 void IMU_Update(float * ac,float * gy,float *attitude,float *ace);
@@ -56,5 +57,6 @@ void Get_Velocity(float * ace,float *v,int call_time,float ace_sub);
 void Get_Height(float *vz,float refer_height,int call_time,float *height);
 void Get_Position(float * ace,float *v,int call_time,float refer_height,float * Height);
 void Get_Ace_Offset();
+void Wait_Height_Init();
 #endif
 

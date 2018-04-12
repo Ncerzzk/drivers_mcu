@@ -52,11 +52,13 @@ pram_node Pram_Array[]={
   {"Height_Open",&Height_Open_Flag,sizeof(Height_Open_Flag)},
   {"Motor_Open",&Motor_Open_Flag,sizeof(Motor_Open_Flag)},
   {"Roll_Pitch_Open",&Roll_Pitch_Flag,sizeof(Roll_Pitch_Flag)},
-  {"Angle_Z_Open",&Angle_Speed_Z_Flag,sizeof(Angle_Speed_Z_Flag)}
+  {"Angle_Z_Open",&Angle_Speed_Z_Flag,sizeof(Angle_Speed_Z_Flag)},
+  
+  {"Fly_Duty",&fly_duty,sizeof(fly_duty)}
 };
 
 
-#define WAVE_TYPE_NUM 33
+#define WAVE_TYPE_NUM 34
 
 extern float a_correct[3];
 extern float v_correct[3],s_correct[3];
@@ -107,7 +109,9 @@ wave_node Wave_Array[WAVE_TYPE_NUM]={
   {"scorrect",s_correct+2},
   
   {"interv",inter_v+2},
-  {"inters",inter_height+2}
+  {"inters",inter_height+2},
+  
+  {"r_height",&Relative_Height}
   
   
   
@@ -130,7 +134,7 @@ void send_wave(int data1,int data2,int data3,int data4){
 
 
 void debug_send_wave(){
-	OutData[0]=(int)(*debug_wave[0]* wave_gain);
+	OutData[0]=(int)(*debug_wave[0]* wave_gain*100);
 	OutData[1]=(int)(*debug_wave[1]* wave_gain);
 	OutData[2]=(int)(*debug_wave[2]* wave_gain);
 	OutData[3]=(int)(*debug_wave[3]* wave_gain);
@@ -391,6 +395,7 @@ float HB_Get(History_Buffer * hb,int index){
 
 *************************************************/
 
+
 float LPButterworth(float curr_input,Butter_BufferData *Buffer,Butter_Parameter *Parameter)
 {
 
@@ -457,4 +462,18 @@ void get_info(int arg_num,char **s,float *args){
   for(int i=0;i<num;++i){
     uprintf("%s:  %f\r\n",Wave_Array[i].wave_string,*Wave_Array[i].wave_ptr);
   }
+}
+
+
+float Limit_Dealt_Filter(float now,Window_Filter_Struct * wfs,float max_dealt){
+  float sub=now-wfs->Window_Buffer[wfs->i];
+  float temp;
+  if(sub>max_dealt){
+    temp=wfs->Window_Buffer[wfs->i]+max_dealt;
+  }else if(sub<-max_dealt){
+    temp=wfs->Window_Buffer[wfs->i]-max_dealt;
+  }else{
+    temp=now;
+  }
+  return Window_Filter(wfs,temp);
 }

@@ -20,13 +20,14 @@ enum attitude{
 float pitch_target=0;     //3.25
 float roll_target=0;  //48.5
 float yaw_target=0;
-float balance_roll=1;   //平衡位置的角度
-float balance_pitch=0;  //平衡位置的角度
-float height_target=100;   //单位cm
+float balance_roll=2.5;   //平衡位置的角度
+float balance_pitch=2;  //平衡位置的角度    该位置的角度是由于加速度计的零偏误差造成的。
+float height_target=200;   //单位cm
 float height_offset=0;  
 float Angle_Speed_X_Out=0;
 float Angle_Speed_Y_Out=0;
 float Angle_Speed_Z_Out=0;
+float fly_duty=40;
 
 float Velocity_Z_Out,Velocity_Z_Out_Old;
 //float Height_Out,Height_Out_Old;
@@ -56,7 +57,7 @@ PID_S ANGLE_SPEED_Z_PID={-10,-20,0,0,0,20}; //{-20,-20,0,0,0,5};
 
 PID_S Height_PID={0,0,0,0,0,9000};  //0.3
 PID_S ACCEL_SPEED_Z_PID={7,0,0,0,0,2};
-PID_S Velocity_Z_PID={0.2,0,0,0,0,1000};
+PID_S Velocity_Z_PID={0.03,1,0.005,0,0,2000};
 
 PID_S X_PID={0.1,0,0,0,0,9000};
 PID_S Y_PID={0.1,0,0,0,0,9000};
@@ -72,9 +73,11 @@ void Fly_Stop(void);
 float * get_pid_ptr(char **s);
 float Get_Correct(float now,float last,int correct_time,int step_time); 
 
+
+
 void Fly_Init(void){      //解锁飞行，初始化高度、yaw
 	State=FLY_WAIT;
-	base_duty=0;           //FLY_WAIT状态，占空比可以手动更改
+	base_duty=fly_duty;           //FLY_WAIT状态，占空比可以手动更改
 	ROLL_PID.i=0;
 	PITCH_PID.i=0;
 	ANGLE_SPEED_Y_PID.i=0;
@@ -86,7 +89,7 @@ void Fly_Init(void){      //解锁飞行，初始化高度、yaw
     yaw_target=Angle[YAW];
     
     
-    height_offset=Height;
+    //height_offset=Height;         //电机旋转后的气压计会突变，不可在此时初始化高度
     Correct=0;
     Velocity_Z_Out=0;
     Velocity_Z_Out_Old=0;
@@ -175,22 +178,24 @@ void RC_Set_Target(float thrust,float direction,float ele,float aile){
   /*
   定高测试语句
 */
+  uprintf("%f %f %f %f\r\n",thrust,direction,ele,aile);
+  //HAL_Delay(10);
   if(direction>97){
     Fly_Stop();
     uprintf("set_stop direction!\r\n");
   }
-  base_duty=thrust;       //定高测试，注释掉这句
+  
+  base_duty=thrust-50;       //定高测试，注释掉这句
   
   if(State!=STOP){
     if(base_duty<20){
       base_duty=20;
     } 
   }
-  roll_target=(10*ele/100-5)+balance_roll;
-  pitch_target=-(10*aile/100-5)+balance_pitch;
+  roll_target=(10*ele/100-5);
+  pitch_target=-(10*aile/100-5);
 }
 
-#define FLY_DUTY   40
 
 void Fly_Control(){		
   float Pitch_Out=0;
@@ -215,9 +220,9 @@ void Fly_Control(){
   //Limit(Angle_Speed_Z_Out,15);
   
   if(Roll_Pitch_Flag){ //外环开启
-    Roll_Out=PID_Control(&ROLL_PID,roll_target,Angle[ROLL]);     //如果是调角速度内环，注释掉这句
+    Roll_Out=PID_Control(&ROLL_PID,roll_target+balance_roll,Angle[ROLL]);     //如果是调角速度内环，注释掉这句
     Limit(Roll_Out,10);
-    Pitch_Out=PID_Control(&PITCH_PID,pitch_target,Angle[PITCH]);  //如果是调角速度内环，注释掉这句
+    Pitch_Out=PID_Control(&PITCH_PID,pitch_target+balance_pitch,Angle[PITCH]);  //如果是调角速度内环，注释掉这句
     Limit(Pitch_Out,10);
   }else{//外环关闭
     Roll_Out=0;
@@ -254,10 +259,19 @@ void Fly_Control(){
 
 
 void Height_Control(){
-  float height_out=0;
+  static float height_out=0;
+  static int height_cnt=0;
+  
+  
   if(Height_Open_Flag){
+    height_cnt++;
+    if(height_cnt==5){
+      height_out=PID_Control(&Height_PID,height_target+height_offset,Height);
+      height_cnt=0;
+    }
+    
     Velocity_Z_Out_Old=Velocity_Z_Out;
-    height_out=PID_Control(&Height_PID,height_target+height_offset,Height);
+    
     //Height_Out=PID_Control(&Height_PID,height_target+height_offset,Height);
     Velocity_Z_Out=PID_Control(&Velocity_Z_PID,height_out,Velocity[2]);
   }else{

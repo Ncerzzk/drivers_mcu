@@ -10,9 +10,14 @@ typedef struct{
   float * wave_ptr;
 }wave_node;
 extern wave_node Wave_Array[];
+
+typedef enum{
+  GPS_NO,
+  GPS_OK
+}GPS_State;
 typedef struct{
     float UTC_TIME;
-    unsigned char State;
+    GPS_State State;
     double Lat;
     double Long;
     float v;
@@ -75,4 +80,5 @@ typedef struct
 
 float LPButterworth(float curr_input,Butter_BufferData *Buffer,Butter_Parameter *Parameter);
 void get_info(int arg_num,char **s,float *args);
+float Limit_Dealt_Filter(float now,Window_Filter_Struct * wfs,float max_dealt);
 #endif

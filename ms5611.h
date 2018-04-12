@@ -4,6 +4,7 @@
 #include "stm32f4xx_hal.h"
 #include "function_ptr.h"
 
+#define MS5611OPEN      1
 
 typedef struct{
   	i2c_write_buffer_fptr i2c_write_buffer;

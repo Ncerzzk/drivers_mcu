@@ -2,7 +2,8 @@
 #include "usart.h"
 #include "arm_math.h"
 #include "base.h"
-
+#include "control.h"
+#include "ms5611.h"
 
 
 #define INTEGRAL_CONSTANT 0.002f		//积分时间 2ms
@@ -23,6 +24,7 @@ float Mag[3];
 float Accel_E[3]; //天地坐标系下的加速度
 float Velocity[3];
 float Height;
+float Relative_Height;
 int16_t Gyro_Offset[3];
 
 float gravity_X,gravity_Y,gravity_Z; //重力加速度分量
@@ -266,6 +268,10 @@ void IMU_Update(float * ac,float * gy,float *attitude,float *ace){
     attitude[2]= atan2(2*q1q2 + 2*q0q3, -2*q2q2 - 2*q3q3+1)* 57.3f;         //yaw
 }
  
+Butter_BufferData Ace_Butter_Buffer_Data;
+Butter_Parameter  Ace_Butter_Parameter={{1,-1.1429805025399011 , 0.41280159809618877},\
+  {0.067455273889071896,0.13491054777814379 ,0.067455273889071896}};
+
 void AHR_Update(float * ac,float * gy,float * mag,float * attitude,float *ace,uint8_t use_mag){
     float ax,ay,az,wx,wy,wz,mx,my,mz;
 	float norm;
@@ -303,7 +309,7 @@ void AHR_Update(float * ac,float * gy,float * mag,float * attitude,float *ace,ui
 	ace[1] = 2*ax*(q1q2 + q0q3) + 2*ay*(0.5f - q1q1 - q3q3) + 2*az*(q2q3 - q0q1); 
 	ace[2] = 2*ax*(q1q3 - q0q2) + 2*ay*(q2q3 + q0q1) + 2*az*(0.5f - q1q1 - q2q2);
     
-    
+    ace[2]=LPButterworth(ace[2],&Ace_Butter_Buffer_Data,&Ace_Butter_Parameter);
     arm_sqrt_f32(ax*ax+ay*ay+az*az,&norm);
 	if(norm<Semig)
 		return ;
@@ -466,6 +472,9 @@ float a_correct[3];
 float v_correct[3],s_correct[3];
 float inter_height[3];
 float inter_v[3];
+
+
+
 void Get_Position(float * ace,float *v,int call_time,float refer_height,float * Height){
   float height_sub=0;
   float a[3];
@@ -488,6 +497,7 @@ void Get_Position(float * ace,float *v,int call_time,float refer_height,float * 
   v_correct[2]+=height_sub*K_V_H*dt;            //v的微分
   s_correct[2]+=height_sub*K_S_H*dt;            //s的微分
   
+  
   a[2]=(ace[2]-ACE_Z_Offset)*980.0f+a_correct[2];   //zheli youwenti 
   
   v_dealt[2]=a[2]*dt;                           // dv=a*dt
@@ -499,6 +509,8 @@ void Get_Position(float * ace,float *v,int call_time,float refer_height,float * 
   inter_v[2]+=v_dealt[2];
   
   v[2]=inter_v[2]+v_correct[2];
+  
+  Relative_Height=*Height-height_offset;
   
   //v[2]+=a[2]*call_time/1000.0f+v_correct[2];
   
@@ -526,4 +538,23 @@ void Get_Ace_Offset(){
   uprintf("adjust ace_offset ok!\r\n");
   uprintf("ace_offset:%f\r\n",sum);
   ACE_Offset_Flag=0;
+}
+
+void Wait_Height_Init(){
+  int num=0;
+  float sum;
+  float temp;
+  while(num<20){
+    temp=Velocity[2];
+    if(temp<20&&temp>-20){
+      num++;
+    }
+    HAL_Delay(10);
+  }
+  for(num=0;num<20;++num){
+    sum+=Height;
+  }
+  
+  height_offset=sum/20;
+  uprintf("Height init OK!Height_Offset=%f\r\n",height_offset);
 }

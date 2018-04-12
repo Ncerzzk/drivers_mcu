@@ -1,6 +1,7 @@
  
 
 #include "outputdata.h"
+#include "string.h"
 
 
 int OutData[4] = {0};
@@ -54,5 +55,14 @@ void OutPut_Data(void)
   HAL_UART_Transmit(&huart6,databuf,10,100);
 
 }
-
-
+  
+void Out_My_Data(float d1,float d2,float d3,float d4){
+  char temp[19]={0xFF,0x00,16};
+  
+  memcpy(temp+3,&d1,sizeof(d1));
+  memcpy(temp+7,&d2,sizeof(d1));
+  memcpy(temp+11,&d3,sizeof(d1));
+  memcpy(temp+15,&d4,sizeof(d1));
+  
+  HAL_UART_Transmit(&huart6,temp,19,100);
+}

@@ -2,8 +2,7 @@
 #include "usart.h"
 #include "i2c.h"
 
-#include "string.h"
-#include "stdlib.h"
+
 
 
 
@@ -11,7 +10,7 @@ MPU_Dev MPU9250;
 MPU_Setting MPU9250_Setting;
 
 /*
-下面三个函数需用户自己实现。
+下面几个个函数需用户自己实现。
 */
 extern I2C_HandleTypeDef hi2c3;
 uint8_t I2C_Write_Buffer(uint8_t slaveAddr, uint8_t writeAddr, uint8_t *pBuffer,uint16_t len);
@@ -81,8 +80,9 @@ void MPU_ReadM_Mag(MPU_Dev *dev,int16_t mag[]){
     */
     i2c_result=dev->i2c_read_buffer(dev->dev_mag_addr,MAG_ST2,&ST_data,1);
     I2C_Error_Check(dev,i2c_result);
+    
     /*
-    磁力计的正方向需要修改。磁力计的X、Y与加速度计的反了，因此，磁力计的X应作为Y
+    磁力计的正方向需要修改。MPU9250上，磁力计的X、Y与加速度计的反了，因此，磁力计的X应作为Y
     磁力计的Y应作为X，否则在角度融合时会出现错误。
     磁力计的Z轴正方向与加速度计相反，因此加了个负号。
     
@@ -116,13 +116,11 @@ void MPU9250_Init(MPU_Dev * dev){
 	dev->setting->accel_high_pass_filter_setting=_5HZ;
 	dev->setting->gyro_range_setting=RANGE500;
 	
-//	I2C_ByteWrite(0xEE,0x1E,1);
 	MPU_INIT:
 	
 	dev->delay_ms(50);
 	
-    //dev->i2c_write_buffer(0xEE,0x05,&data,1);
- 
+
 	mpu_write_byte(dev,PWR_MGMT_1,0x00);
 	mpu_write_byte(dev,SMPLRT_DIV, 0x00);
 	mpu_write_byte(dev,MPU_CONFIG, 0x02);  //之前延时为20ms(0x06，现在为3ms左右 0x02)
@@ -182,6 +180,5 @@ void MPU9250_Init(MPU_Dev * dev){
         uprintf("mpu9250 init failed!\r\n");
 		goto MPU_INIT;
 	}
-    
-	
+
 }
