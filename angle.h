@@ -48,8 +48,6 @@ float KalMan(Kal_Struct *kal,float x);
 void Get_Accel_Angle(void);
 void Get_Angle_Speed(void);
 
-void Get_Mag_Angle(void);
-
 void Get_Angle(void);
 void Adjust_Acc(void);
 void Get_Accel_Angle_Fast(void);
@@ -78,6 +76,8 @@ typedef struct{
   int16_t Gyro_Offset[3];
   float Acc_Offset[3];
   float Acc_Scale[3];
+  float Mag_Offset[3];
+  float Mag_Scale[3];
 }__Calibration;
 
 extern __Calibration Calibration;

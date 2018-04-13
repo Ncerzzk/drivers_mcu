@@ -39,9 +39,12 @@ float exInt,eyInt,ezInt;
 float IMU_P=1.0f;				//2.0f   //20
 float IMU_I=0.005f;		//0.005          0.03
 
-__Calibration Calibration={{0,0,0},\
-  {-0.0200311354256406f,-0.000421249210775063f,0.0411504643712059f},\
-  {1.01977103002458f,1.011318642755862f,0.969637306791105f}};                   //acc_scale
+__Calibration Calibration={{0,0,0},
+  {-0.0200311354256406f,-0.000421249210775063f,0.0411504643712059f},//acc_offset
+  {1.01977103002458f,1.011318642755862f,0.969637306791105f},//acc_scale
+  {1.7811,-0.8317,-0.2467},//mag_offset
+  {2.4594,2.3736,2.1726}//mag_scale
+};                   
 
   /*
   
@@ -61,32 +64,6 @@ float Get_Attitude_Data(int16_t raw_data,float range,int16_t offset){
 */
 float Get_Scale_Data(float raw_data,float offset,float scale){
   return (raw_data-offset)*scale;
-}
-
-void Scale_Mag(float *mag){
-  
-  float mag_offset[3]={
-    -1.10733816275476,
-    1.68293111911182,
-   -1.47880622640983
-  };
-  float B[6]={
-    1.06467231442859,
-    -0.000170726411333116,
-    0.0286170458742405,
-    1.0056622056883,
-    0.0129797749003217,
-    0.934904674137626
-  };
-
-  float temp[3];
-  int i;
-  for(i=0;i<3;++i){
-    temp[i]=mag[i]-mag_offset[i];
-  }
-  mag[0]=B[0]*temp[0]+B[1]*temp[1]+B[2]*temp[2];
-  mag[1]=B[1]*temp[0]+B[3]*temp[1]+B[4]*temp[2];
-  mag[2]=B[2]*temp[0]+B[4]*temp[1]+B[5]*temp[2];  
 }
 
 uint8_t Adjust_Accel_Mag_Flag;
@@ -400,27 +377,32 @@ static void Read_Senor(Attitude * a){
   
   int16_t mag[3],ac[3],gy[3];
   
-  float accel_temp[3];
+  float accel_temp;
+  float mag_temp;
   
   call_time++;
   if(call_time>5){
     MPU_ReadM_Mag(&MPU9250,mag);
     for(int i=0;i<3;++i){
-      a->Mag[i]=mag[i]*0.15f/100.0f;
+      mag_temp=mag[i]*0.15f/100.0f;
+      a->Mag[i]=Get_Scale_Data(mag_temp,Calibration.Mag_Offset[i],Calibration.Mag_Scale[i]);
     }
-    Scale_Mag(a->Mag);
+    //Scale_Mag(a->Mag);
     call_time=0;
   }
   
   MPU_Read6500(&MPU9250,ac,gy);
   for(int i=0;i<3;++i){
-    accel_temp[i]=Get_Attitude_Data(ac[i],MPU9250.setting->accel_range,0);
+    accel_temp=Get_Attitude_Data(ac[i],MPU9250.setting->accel_range,0);
+    a->Accel[i]=Get_Scale_Data(accel_temp,Calibration.Acc_Offset[i],Calibration.Acc_Scale[i]);
+    
     a->Angle_Speed[i]=Get_Attitude_Data(gy[i],MPU9250.setting->gyro_range,Calibration.Gyro_Offset[i]);
+
   }
   
-  a->Accel[0]=Get_Scale_Data(accel_temp[0],Calibration.Acc_Offset[0],Calibration.Acc_Scale[0]);
-  a->Accel[1]=Get_Scale_Data(accel_temp[1],Calibration.Acc_Offset[1],Calibration.Acc_Scale[1]);
-  a->Accel[2]=Get_Scale_Data(accel_temp[2],Calibration.Acc_Offset[2],Calibration.Acc_Scale[2]);  
+//  a->Accel[0]=Get_Scale_Data(accel_temp[0],Calibration.Acc_Offset[0],Calibration.Acc_Scale[0]);
+//  a->Accel[1]=Get_Scale_Data(accel_temp[1],Calibration.Acc_Offset[1],Calibration.Acc_Scale[1]);
+//  a->Accel[2]=Get_Scale_Data(accel_temp[2],Calibration.Acc_Offset[2],Calibration.Acc_Scale[2]);  
 }
 
 void Get_Attitude(Attitude * a){
